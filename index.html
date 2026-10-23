@@ -153,7 +153,7 @@
         <button id="dirBtn" class="small" style="min-width:92px"></button>
       </div>
       <input type="text" id="search" placeholder="Filter by name…" style="margin-top:8px" autocomplete="off">
-      <div class="row-actions" style="margin-top:8px"><button class="small" id="rescanBtn">🔄 Rescan library</button></div>
+      <div class="row-actions" style="margin-top:8px"><button class="small" id="rescanBtn">🔄 Rescan library</button><button class="small" id="libSync">☁️ Sync</button></div>
       <div id="rescanLog" class="muted" style="font-size:.9rem"></div>
     </div>
     <div class="card" id="libList"></div>
@@ -218,6 +218,17 @@
       </div>
       <p class="muted">Calories = 4×protein + 4×carbs + 9×fat. Saved on this phone; change them whenever your targets change.</p>
     </div>
+    <div class="card" id="syncBox">
+      <h3 style="margin-top:0">Sync with GitHub</h3>
+      <p class="muted" style="margin:0 0 8px">Keeps a copy of your <b>product library</b> in your private data repo, so Claude can fill in prices. Your targets and “Left today” are never uploaded. One tap: new prices come in first, then your library goes up.</p>
+      <label class="f">Repository (owner/name)<input type="text" id="s_repo" autocomplete="off" spellcheck="false"></label>
+      <label class="f" style="margin-top:6px">Access token (fine-grained, Contents read/write on that repo only)<input type="password" id="s_token" autocomplete="off" spellcheck="false" placeholder="github_pat_…"></label>
+      <div class="row-actions" style="margin-top:8px">
+        <button class="primary" id="syncBtn">☁️ Sync now</button>
+        <button class="small" id="syncForget">Forget token</button>
+      </div>
+      <div id="syncStatus" class="muted" style="margin-top:6px"></div>
+    </div>
     <div class="card">
       <h3 style="margin-top:0">Your data</h3>
       <div class="row-actions">
@@ -231,7 +242,7 @@
     </div>
     <div class="card muted">
       Product data comes from <b>Open Food Facts</b> (crowd-sourced, so check the numbers against the label).
-      Only the barcode you scan is sent to them (and to Open Prices for price suggestions). Macro Check v5
+      Only the barcode you scan is sent to them (and to Open Prices for price suggestions). Macro Check v6
     </div>
   </section>
 </main>
@@ -987,6 +998,106 @@
       '<p class="muted" style="margin:6px 0 0">Green = better on that line. Lower is better for prices and kcal per 100; higher for everything else. Not every line matters for your goal.</p>';
   }
 
+  // ---------- sync with a private GitHub repo ----------
+  var SYNC_DEF = { repo: 'DynamicUnicorn/macro-check-data', path: 'library.json', branch: 'main', token: '', last: '' };
+  state.sync = Object.assign({}, SYNC_DEF, store.get('mc.sync', {}));
+  function saveSync() { store.set('mc.sync', state.sync); }
+  function b64enc(str) {
+    var bytes = new TextEncoder().encode(str), bin = '';
+    for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  function b64dec(b64) {
+    var bin = atob(String(b64).replace(/\s/g, '')), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  function nowStamp() { var d = new Date(); return MC.dmy(d) + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+  function ghUrl() {
+    return 'https://api.github.com/repos/' + state.sync.repo.trim() + '/contents/' + encodeURIComponent(state.sync.path);
+  }
+  function ghFetch(method, body) {
+    var url = ghUrl() + (method === 'GET' ? '?ref=' + encodeURIComponent(state.sync.branch) + '&t=' + Date.now() : '');
+    return fetch(url, {
+      method: method, cache: 'no-store',
+      headers: { 'Authorization': 'Bearer ' + state.sync.token, 'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    });
+  }
+  function ghError(r) {
+    if (r.status === 401) return 'GitHub refused the token (expired or mistyped?). Paste a new one.';
+    if (r.status === 403) return 'The token has no write access to this repo. Check Contents: Read and write.';
+    if (r.status === 404) return 'Repo not found, or the token cannot see it. Check the name and the token’s repository access.';
+    return 'GitHub error ' + r.status + '.';
+  }
+  function syncMsg(t) { $('#syncStatus').innerHTML = t; }
+  var syncing = false;
+  async function syncNow() {
+    if (syncing) return;
+    if (!state.sync.token) { showTab('set'); syncMsg('Paste your access token first.'); toast('Add your GitHub token in Settings'); return; }
+    if (!/^[\w.-]+\/[\w.-]+$/.test(state.sync.repo.trim())) { syncMsg('Repository should look like owner/name.'); return; }
+    syncing = true; $('#syncBtn').disabled = true; $('#libSync').disabled = true;
+    syncMsg('Syncing…');
+    try {
+      for (var attempt = 0; attempt < 2; attempt++) {
+        var r = await ghFetch('GET'), sha = null, remote = null;
+        if (r.status === 200) {
+          var j = await r.json(); sha = j.sha;
+          try { remote = JSON.parse(b64dec(j.content || '')); } catch (e) { throw new Error('library.json on GitHub is not valid JSON, so nothing was changed. Fix or delete it there.'); }
+        } else if (r.status !== 404) { throw new Error(ghError(r)); }
+        var updated = [];
+        if (remote && remote.products) {
+          var m = MC.mergePrices(state.products, remote.products);
+          updated = m.updated;
+          if (updated.length) { state.products = m.products; saveProducts(); }
+        }
+        if (remote && remote.products && JSON.stringify(remote.products) === JSON.stringify(state.products)) {
+          state.sync.last = nowStamp(); saveSync();
+          finishSync(updated, false); return;
+        }
+        var payload = { app: 'macro-check', format: 1, synced: nowStamp(),
+          note: 'Product library from the Macro Check app. Targets are not included. Claude may edit price, priceDate, priceSource and priceHistory.',
+          products: state.products };
+        var body = { message: 'Sync from phone ' + nowStamp(), content: b64enc(JSON.stringify(payload, null, 1)), branch: state.sync.branch };
+        if (sha) body.sha = sha;
+        var w = await ghFetch('PUT', body);
+        if (w.status === 200 || w.status === 201) { state.sync.last = nowStamp(); saveSync(); finishSync(updated, true); return; }
+        if ((w.status === 409 || w.status === 422) && attempt === 0) continue;   // changed on GitHub meanwhile: merge again
+        if (w.status === 404 && !sha) throw new Error('Could not create library.json. Check that the repo exists and has a “main” branch, and that the token can write to it.');
+        throw new Error(ghError(w));
+      }
+      throw new Error('GitHub kept changing during sync. Try again.');
+    } catch (e) {
+      syncMsg('<span class="neg">Sync failed:</span> ' + esc(e.message || e));
+    } finally {
+      syncing = false; $('#syncBtn').disabled = false; $('#libSync').disabled = false;
+    }
+  }
+  function finishSync(updated, uploaded) {
+    var names = updated.map(function (id) { return MC.displayName(state.products[id]) || '(no name)'; });
+    syncMsg('<span class="okc">Synced ' + esc(state.sync.last) + '.</span> ' +
+      (updated.length ? updated.length + ' price' + (updated.length === 1 ? '' : 's') + ' updated: ' + esc(names.slice(0, 8).join(', ')) + (names.length > 8 ? '…' : '') + '. '
+        : 'No new prices. ') + (uploaded ? 'Library uploaded.' : 'GitHub was already up to date.'));
+    toast(updated.length ? updated.length + ' new price' + (updated.length === 1 ? '' : 's') + ' from GitHub' : 'Synced');
+    renderLib(); if (cur()) { renderItem(); renderResults(); }
+  }
+  function loadSync() {
+    $('#s_repo').value = state.sync.repo;
+    $('#s_token').value = ''; $('#s_token').placeholder = state.sync.token ? 'Token saved ✓ (paste to replace)' : 'github_pat_…';
+    syncMsg(state.sync.last ? 'Last sync: ' + esc(state.sync.last) : (state.sync.token ? 'Not synced yet.' : 'Not set up yet.'));
+  }
+  $('#s_repo').addEventListener('input', function (e) { state.sync.repo = e.target.value.trim(); saveSync(); });
+  $('#s_token').addEventListener('change', function (e) {
+    var v = e.target.value.trim(); if (!v) return;
+    state.sync.token = v; saveSync(); loadSync(); toast('Token saved on this phone');
+  });
+  $('#syncForget').addEventListener('click', function () {
+    if (!state.sync.token || confirm('Remove the GitHub token from this phone?')) { state.sync.token = ''; saveSync(); loadSync(); }
+  });
+  $('#syncBtn').addEventListener('click', syncNow);
+  $('#libSync').addEventListener('click', syncNow);
+
   // ---------- settings ----------
   function loadTargets() {
     ['train', 'rest'].forEach(function (id) {
@@ -1043,7 +1154,7 @@
   });
 
   // ---------- init ----------
-  initLib(); loadTargets(); loadRemaining(); renderItem(); renderResults();
+  initLib(); loadTargets(); loadRemaining(); loadSync(); renderItem(); renderResults();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').catch(function () {});
   }

@@ -24,8 +24,9 @@ Live app: https://dynamicunicorn.github.io/macro-check/
 6. [Updating and deploying](#updating-and-deploying)
 7. [Tests](#tests)
 8. [Working on another machine](#working-on-another-machine)
-9. [Known limitations](#known-limitations)
-10. [Changelog](#changelog)
+9. [Sync and prices from Claude](#sync-and-prices-from-claude)
+10. [Known limitations](#known-limitations)
+11. [Changelog](#changelog)
 
 ---
 
@@ -80,6 +81,7 @@ Quick chips: *Pure protein*, *Pure fat*, *Pure carbs*, *Cheapest protein/fat/car
 **Compare two items:** tap each button to open a compact, searchable list (type part of your name, the product name or the brand), then pick two products and see every library metric side by side. The better value per line is green, and the bottom line counts how many lines each wins. Not every line matters for your goal (a cheaper kcal-per-€ isn't a win if you're cutting), so read the lines you care about.
 
 ### Settings tab
+- **Sync with GitHub:** see [Sync and prices from Claude](#sync-and-prices-from-claude).
 - **Left today:** optional. Copy the remaining protein, fat and carbs from MacroFactor; kcal are calculated. Used by *Fit for your day* and *Fill my gap*. The app warns you when the numbers are from an earlier day.
 - Training and rest day targets.
 - **Export CSV** (for a spreadsheet), **Backup (JSON)** and **Restore backup**.
@@ -158,7 +160,7 @@ The site is served by **GitHub Pages** from the `main` branch, root folder, of `
 
 When changing any app file:
 1. Run the tests: `npm test` (see below).
-2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v5` → `macro-check-v6`). Without this, phones keep showing the cached old version.
+2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v6` → `macro-check-v7`). Without this, phones keep showing the cached old version.
 3. Commit and push to `main`.
 4. On the phone, close and reopen the app once to load the new version.
 
@@ -175,8 +177,8 @@ npm install      # once: installs jsdom for the UI test
 npm test         # runs both test suites
 ```
 
-- `npm run test:unit`: hand-calculated checks for parsing (comma decimals), scaling, every metric, the budget fit and max amount, liquids, price per kg/litre, sorting (including A–Z), aliases and search, Fill my gap, Compare, the rescan merge rules (edited fields kept), price history, CSV output and barcode checksums. All test products are synthetic examples, not real label data.
-- `npm run test:ui`: loads the app in a simulated browser and checks targets, manual entry, barcode lookup (mocked), crowd prices, layout order, liquids, servings, price history, the library and its sorting, aliases, the picker, Fill my gap, Compare and a full rescan. It doesn't cover the camera, the flashlight or real network calls.
+- `npm run test:unit`: hand-calculated checks for parsing (comma decimals), scaling, every metric, the budget fit and max amount, liquids, price per kg/litre, sorting (including A–Z), aliases and search, Fill my gap, Compare, the sync price-merge rules, the rescan merge rules (edited fields kept), price history, CSV output and barcode checksums. All test products are synthetic examples, not real label data.
+- `npm run test:ui`: loads the app in a simulated browser and checks targets, manual entry, barcode lookup (mocked), crowd prices, layout order, liquids, servings, price history, the library and its sorting, aliases, the picker, Fill my gap, Compare, a full rescan and GitHub sync (against a mocked GitHub API). It doesn't cover the camera, the flashlight or real network calls.
 
 GitHub also runs `npm test` on every push (the **Actions** tab). A red cross on a commit means a test failed.
 
@@ -195,6 +197,31 @@ With Claude: open the same chat on any device, or start a new one and ask Claude
 
 ---
 
+## Sync and prices from Claude
+
+The app can keep a copy of your **product library** in a **private** repo, `DynamicUnicorn/macro-check-data`, as `library.json`. That lets Claude look up shelf prices (e.g. on ah.nl) and write them into the file, and the app pulls them in. Your targets, "Left today" and the token itself are **never uploaded**.
+
+**One-time setup**
+1. Create the repo: `gh repo create macro-check-data --private --add-readme`
+2. Create a fine-grained token (GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens): only repository `macro-check-data`, permission **Contents: Read and write**, expiry 1 year.
+3. In the app: Settings → Sync with GitHub → paste the token. It's stored only on that phone, and the field never shows it again.
+4. Make sure the Claude GitHub App can access `macro-check-data`.
+
+**Each round**
+1. Scan items, then tap **☁️ Sync** (Library tab or Settings).
+2. Ask Claude to fill in prices. Claude edits only `price`, `priceDate`, `priceSource` and `priceHistory` in `library.json` and commits.
+3. Tap **☁️ Sync** again. The status line lists which prices came in.
+
+**How a sync works:** download `library.json` → merge prices → upload your library. The merge rules:
+- Only price fields are taken from GitHub. Names, aliases, macros and servings always come from the phone.
+- The newer price (by date) wins. On the same date the phone's price is kept. Both price histories are combined.
+- Items deleted on the phone are not brought back.
+- If nothing changed, nothing is committed. If GitHub changed during the sync, the app merges again once and retries.
+
+**Errors:** the status line explains a bad or expired token (401), missing write permission (403) and a wrong repo name or no access (404). When the token expires, make a new one and paste it in.
+
+---
+
 ## Known limitations
 
 - **Camera scanning** needs HTTPS and a supported browser. Chrome/Samsung Internet on Android use the built-in detector; other browsers use the fallback library, which needs internet the first time.
@@ -205,6 +232,7 @@ With Claude: open the same chat on any device, or start a new one and ask Claude
 - Liquids are handled per 100 ml throughout; there is no conversion between grams and millilitres.
 - **Flashlight** depends on the phone and browser exposing torch control; on phones that don't, the button stays hidden.
 - **Fill my gap** ignores pack size: it may suggest 2.3 packs. It also ranks one product at a time, not combinations.
+- **Sync** stores the token in the phone's browser storage. Anyone with your unlocked phone could use it, but only on `macro-check-data`. Use *Forget token* if you lend your phone out. `library.json` must stay under 1 MB (roughly 1,500 items) for GitHub's contents API.
 - **Rescan** has to stay open while it runs; leaving the app pauses it. Run it again to finish; already-updated items are simply re-checked.
 
 ---
@@ -213,6 +241,7 @@ With Claude: open the same chat on any device, or start a new one and ask Claude
 
 All dates dd/mm/yyyy.
 
+- **23/10/2026 – v6**: *Sync with GitHub*: product library to a private repo, prices merged back in. Targets and token never leave the phone.
 - **23/10/2026 – tooling**: tests moved to `tests/`, made path-independent, runnable with `npm test` on any machine and on GitHub Actions; `CLAUDE.md` added.
 - **23/10/2026 – v5**: custom names (aliases) shown everywhere without changing the product name; compact searchable item picker for Compare.
 - **23/10/2026 – v4**: Tools tab with *Fill my gap* and *Compare*; flashlight in the scanner; saved servings; price history; *Rescan library* (keeps your own edits); *Left today* moved to Settings.

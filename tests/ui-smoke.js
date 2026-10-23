@@ -19,7 +19,8 @@ const dom = new JSDOM(html, {
   beforeParse(w) {
     w.confirm = () => true;
     w.scrollTo = () => {};
-    w.fetch = async (url) => {
+    w.fetch = async (url, opts) => {
+      if (String(url).startsWith('https://api.github.com/')) return global.ghMock(String(url), opts || {});
       if (String(url).includes('prices.openfoodfacts.org')) {
         if (String(url).includes('4006381333931')) return { ok: true, json: async () => ({ items: [
           { price: 2.5, currency: 'EUR', price_per: 'KILOGRAM', date: '2026-10-01', location: { osm_name: 'X', osm_address_country: 'Nederland' } },
@@ -246,6 +247,65 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('rescan kept alias', tunaAfter.alias === 'Tuna');
   check('rescan kept tuna price', tunaAfter.price === 1.99, tunaAfter.price);
   check('rescan kept tuna servings', tunaAfter.servings.length === 1);
+
+  // ---- GitHub sync (mocked API) ----
+  const gh = { file: null, sha: 0, calls: [], conflictOnce: false };
+  const resp = (status, body) => ({ ok: status < 300, status, json: async () => body });
+  const enc = (o) => Buffer.from(JSON.stringify(o), 'utf8').toString('base64');
+  const dec = (b) => JSON.parse(Buffer.from(b, 'base64').toString('utf8'));
+  global.ghMock = async (url, opts) => {
+    gh.calls.push((opts.method || 'GET') + ' ' + url.split('?')[0]);
+    if (opts.headers.Authorization !== 'Bearer github_pat_TEST') return resp(401, {});
+    if (!url.includes('/repos/DynamicUnicorn/macro-check-data/contents/library.json')) return resp(404, {});
+    if ((opts.method || 'GET') === 'GET') return gh.file ? resp(200, { sha: 's' + gh.sha, content: enc(gh.file) }) : resp(404, {});
+    const body = JSON.parse(opts.body);
+    if (gh.conflictOnce) { gh.conflictOnce = false; gh.sha++; return resp(409, {}); }
+    if (gh.file && body.sha !== 's' + gh.sha) return resp(409, {});
+    gh.file = dec(body.content); gh.sha++; gh.lastBody = body;
+    return resp(gh.sha === 1 ? 201 : 200, { content: { sha: 's' + gh.sha } });
+  };
+  $('nav button[data-tab="set"]').click();
+  check('sync repo prefilled', $('#s_repo').value === 'DynamicUnicorn/macro-check-data');
+  $('#syncBtn').click(); await sleep(20);
+  check('sync without token asks for it', $('#syncStatus').textContent.includes('token'));
+  const tok = $('#s_token'); tok.value = 'github_pat_WRONG'; tok.dispatchEvent(new w.Event('change'));
+  $('#syncBtn').click(); await sleep(50);
+  check('bad token explained', $('#syncStatus').textContent.includes('refused the token'), $('#syncStatus').textContent);
+  tok.value = 'github_pat_TEST'; tok.dispatchEvent(new w.Event('change'));
+  check('token not shown after save', tok.value === '' && tok.placeholder.includes('saved'));
+  $('#syncBtn').click(); await sleep(80);
+  check('first sync creates library.json', gh.file && Object.keys(gh.file.products).length === Object.keys(JSON.parse(w.localStorage.getItem('mc.products'))).length, $('#syncStatus').textContent);
+  check('first sync without sha', gh.lastBody && !('sha' in gh.lastBody));
+  check('targets not uploaded', !JSON.stringify(gh.file).includes('"train"') && !('targets' in gh.file) && !('remaining' in gh.file));
+  check('token not uploaded', !JSON.stringify(gh.file).includes('github_pat'));
+  check('alias uploaded', JSON.stringify(gh.file).includes('"alias":"Tuna"'));
+  // Claude fills a price remotely (item without price), and also messes with a name (must be ignored)
+  const remoteMilk = Object.values(gh.file.products).find(p => p.name === 'Milk test');
+  const noPrice = Object.values(gh.file.products).find(p => !(p.price > 0) && p.name !== 'Milk test') || remoteMilk;
+  noPrice.price = 2.49; noPrice.priceDate = '23/10/2026'; noPrice.priceSource = 'ah.nl';
+  noPrice.priceHistory = [{ price: 2.49, date: '23/10/2026', source: 'ah.nl' }];
+  const oldName = noPrice.name; noPrice.name = 'RENAMED BY REMOTE';
+  gh.sha++;
+  const putsBefore = gh.calls.filter(c => c.startsWith('PUT')).length;
+  $('#libSync').click(); await sleep(80);
+  const localNow = JSON.parse(w.localStorage.getItem('mc.products'))[noPrice.id];
+  check('remote price pulled in', localNow.price === 2.49 && localNow.priceSource === 'ah.nl', JSON.stringify(localNow).slice(0, 200));
+  check('remote name change ignored', localNow.name === oldName, localNow.name);
+  check('status lists updated price', $('#syncStatus').textContent.includes('1 price updated'), $('#syncStatus').textContent);
+  check('upload after merge restores real name on GitHub', gh.file.products[noPrice.id].name === oldName);
+  check('upload happened', gh.calls.filter(c => c.startsWith('PUT')).length === putsBefore + 1);
+  // nothing changed -> no extra commit
+  const putsMid = gh.calls.filter(c => c.startsWith('PUT')).length;
+  $('#syncBtn').click(); await sleep(80);
+  check('no-op sync makes no commit', gh.calls.filter(c => c.startsWith('PUT')).length === putsMid, $('#syncStatus').textContent);
+  check('no-op status', $('#syncStatus').textContent.includes('already up to date'));
+  // conflict once -> retries and succeeds
+  type('[data-k="kcal"]', '101');
+  gh.conflictOnce = true;
+  $('#syncBtn').click(); await sleep(120);
+  check('conflict retried and synced', $('#syncStatus').textContent.includes('Synced'), $('#syncStatus').textContent);
+  $('#syncForget').click();
+  check('forget token', JSON.parse(w.localStorage.getItem('mc.sync')).token === '');
 
   check('no script errors', errors.length === 0, errors.join('\n'));
   console.log(fails ? fails + ' FAILED' : 'SMOKE ALL PASSED');

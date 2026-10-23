@@ -16,3 +16,14 @@ Full user and technical documentation: README.md. Read it before changing behavi
 - Commit author email must be the GitHub noreply address
   `317667440+DynamicUnicorn@users.noreply.github.com` (email privacy blocks other addresses).
 - Show the user's alias via `MC.displayName(p)`, never `p.name` directly.
+
+## Filling in prices (user asks "fill in prices")
+Data lives in the PRIVATE repo `DynamicUnicorn/macro-check-data`, file `library.json` (`products` map keyed by id).
+1. Pull the latest `library.json`. Work only on items without a price (or ones the user names).
+2. Look up each item on ah.nl (fallback: jumbo.com) by alias/name/brand/pack size. AH pages show no barcode,
+   so match carefully. Use the REGULAR shelf price, not a temporary bonus price.
+3. Edit ONLY `price`, `priceDate` (today, dd/mm/yyyy), `priceSource` ("ah.nl" / "jumbo.com") and append
+   `{price, date, source}` to `priceHistory`. Never touch other fields: the phone overwrites them anyway.
+4. Unsure match (variant, size, not sold) → leave the price empty and list it for the user.
+5. Commit with the noreply email, push, then give the user a review table: their name → matched product → price.
+Never put the data file, targets or tokens in the public `macro-check` repo.

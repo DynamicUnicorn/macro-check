@@ -272,6 +272,43 @@
     };
   }
 
+  // ---------- sync: merge prices from a remote copy ----------
+  // dd/mm/yyyy -> sortable number (yyyymmdd); unknown -> 0
+  function dmyKey(s) {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s || '');
+    return m ? +(m[3] + m[2] + m[1]) : 0;
+  }
+  // Only price fields move from remote to local. Items are matched by id; items that only exist remotely
+  // (e.g. deleted on the phone) are ignored. The newer price (by date) wins; on a tie the local one stays.
+  // Price histories are combined. Returns { products: new map, updated: [ids] }. Inputs are not mutated.
+  function mergePrices(local, remote) {
+    const out = {}, updated = [];
+    Object.keys(local || {}).forEach(function (id) {
+      const L = local[id], R = remote && remote[id];
+      const p = Object.assign({}, L);
+      if (R) {
+        const seen = {}, hist = [];
+        (L.priceHistory || []).concat(R.priceHistory || []).forEach(function (e) {
+          if (!e || !(e.price > 0)) return;
+          const k = e.price.toFixed(2) + '|' + (e.date || '') + '|' + (e.source || '');
+          if (!seen[k]) { seen[k] = 1; hist.push(Object.assign({}, e)); }
+        });
+        hist.sort(function (a, b) { return dmyKey(a.date) - dmyKey(b.date); });   // stable: same-day order kept
+        if (hist.length > 30) hist.splice(0, hist.length - 30);
+        const remoteNewer = R.price > 0 && (!(L.price > 0) || dmyKey(R.priceDate) > dmyKey(L.priceDate));
+        let changed = hist.length !== (L.priceHistory || []).length;
+        if (remoteNewer && (R.price !== L.price || R.priceDate !== L.priceDate)) {
+          p.price = R.price; p.priceDate = R.priceDate || ''; p.priceSource = R.priceSource || '';
+          changed = true;
+        }
+        p.priceHistory = hist;
+        if (changed) updated.push(id);
+      }
+      out[id] = p;
+    });
+    return { products: out, updated: updated };
+  }
+
   // ---------- CSV ----------
   function csvCell(v) {
     if (v === null || v === undefined) return '';
@@ -304,6 +341,7 @@
     unit: unit, edibleWeight: edibleWeight, metrics: metrics, scale: scale, budgetFrom: budgetFrom, fit: fit,
     validBarcode: validBarcode, METRICS: METRICS, metricDef: metricDef, sortProducts: sortProducts, toCsv: toCsv,
     fillGap: fillGap, compare: compare, LOOKUP_FIELDS: LOOKUP_FIELDS, isProtected: isProtected, mergeLookup: mergeLookup,
+    dmyKey: dmyKey, mergePrices: mergePrices,
     ensureHistory: ensureHistory, recordPrice: recordPrice, priceStats: priceStats
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

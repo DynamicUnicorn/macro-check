@@ -166,5 +166,37 @@ eq('A-Z uses alias', MC.sortProducts([{ name: 'Aardbei', alias: 'Zzz' }, { name:
 eq('alias survives rescan merge', MC.mergeLookup({ tracked: true, edited: {}, alias: 'Quark', name: 'x' }, { name: 'y' }).prod.alias, 'Quark');
 eq('csv alias first column', MC.toCsv([al1]).split('\n')[1].startsWith('  Quark ,'), true);
 
+// ---- sync: merge prices ----
+eq('dmyKey', MC.dmyKey('03/10/2026'), 20261003);
+eq('dmyKey bad', MC.dmyKey('2026-10-03'), 0);
+const loc = {
+  a: { id: 'a', name: 'Quark', alias: 'Q', p: 10, price: null, priceDate: '', priceHistory: [] },
+  b: { id: 'b', name: 'Tuna', price: 1.89, priceDate: '20/10/2026', priceSource: 'manual',
+       priceHistory: [{ price: 1.89, date: '20/10/2026', source: 'manual' }] },
+  c: { id: 'c', name: 'Milk', price: 1.19, priceDate: '23/10/2026', priceSource: 'manual',
+       priceHistory: [{ price: 1.19, date: '23/10/2026', source: 'manual' }] },
+  d: { id: 'd', name: 'New on phone' }
+};
+const rem = {
+  a: { id: 'a', name: 'CHANGED REMOTELY', p: 99, price: 1.99, priceDate: '23/10/2026', priceSource: 'ah.nl',
+       priceHistory: [{ price: 1.99, date: '23/10/2026', source: 'ah.nl' }] },
+  b: { id: 'b', price: 1.79, priceDate: '01/10/2026', priceSource: 'ah.nl',
+       priceHistory: [{ price: 1.79, date: '01/10/2026', source: 'ah.nl' }] },
+  c: { id: 'c', price: 1.09, priceDate: '22/10/2026', priceSource: 'ah.nl', priceHistory: [] },
+  z: { id: 'z', name: 'Deleted on phone', price: 5 }
+};
+const mp = MC.mergePrices(loc, rem);
+eq('empty local price filled', mp.products.a.price, 1.99);
+eq('price source copied', mp.products.a.priceSource, 'ah.nl');
+eq('non-price fields never taken from remote', mp.products.a.name + mp.products.a.p + mp.products.a.alias, 'Quark10Q');
+eq('newer local price kept', mp.products.b.price, 1.89);
+eq('older remote price joins history, sorted', mp.products.b.priceHistory.map(e => e.price).join(','), '1.79,1.89');
+eq('same-date tie keeps newer local (23 > 22)', mp.products.c.price, 1.19);
+eq('local-only item untouched', JSON.stringify(mp.products.d), JSON.stringify(loc.d));
+eq('remote-only item not resurrected', 'z' in mp.products, false);
+eq('updated list', mp.updated.sort().join(','), 'a,b');
+eq('inputs not mutated', loc.a.price === null && loc.b.priceHistory.length === 1, true);
+eq('idempotent second merge', MC.mergePrices(mp.products, rem).updated.length, 0);
+
 console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
 process.exit(fails ? 1 : 0);
