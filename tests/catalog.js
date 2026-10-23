@@ -11,13 +11,16 @@ const quark = { code: '8719587412480', product_name: 'Lactosevrije magere kwark'
 eq('transform basic', transform(quark, 'A'), ['8719587412480', 'Lactosevrije magere kwark', 'AH', 'A', 500, 'g', 57, 10, 0.2, 3.8, 0, 3.8]);
 eq('columns length matches', transform(quark, 'A').length, COLUMNS.length);
 eq('prefers Dutch name', transform(Object.assign({}, quark, { product_name_nl: 'Kwark NL' }), 'A')[1], 'Kwark NL');
-eq('kcal from kJ', transform({ code: '12345678', product_name: 'x', nutriments: N(1, 1, 1, { energy_100g: 418.4 }) }, 'J')[6], 100);
+eq('kcal from kJ', transform({ code: '12345678', product_name: 'x', nutriments: N(10, 4, 5, { energy_100g: 418.4 }) }, 'J')[6], 100);
 eq('kcal from macros', transform({ code: '12345678', product_name: 'x', nutriments: N(10, 5, 20) }, 'J')[6], 165);
 eq('liquid by unit', transform({ code: '12345678', product_name: 'melk', product_quantity: '1000', product_quantity_unit: 'ml', nutriments: N(3.5, 1.5, 4.7) }, 'P')[5], 'ml');
 eq('liquid by quantity text', transform({ code: '12345678', product_name: 'cola', quantity: '1,5 l', nutriments: N(0, 0, 0) }, 'P')[5], 'ml');
 eq('missing macro dropped', transform({ code: '12345678', product_name: 'x', nutriments: { proteins_100g: 1, fat_100g: 1 } }, 'A'), null);
 eq('impossible macros dropped', transform({ code: '12345678', product_name: 'x', nutriments: N(60, 30, 30) }, 'A'), null);
 eq('impossible kcal dropped', transform({ code: '12345678', product_name: 'x', nutriments: N(1, 1, 1, { 'energy-kcal_100g': 2000 }) }, 'A'), null);
+eq('kJ path also checked against macros', transform({ code: '12345678', product_name: 'x', nutriments: N(1, 1, 1, { energy_100g: 418.4 }) }, 'J'), null);
+eq('kcal contradicting macros dropped', transform({ code: '12345678', product_name: 'cottage', nutriments: N(11.8, 1, 3, { 'energy-kcal_100g': 23 }) }, 'J'), null);
+eq('kcal agreeing with macros kept', transform({ code: '12345678', product_name: 'cottage', nutriments: N(11.8, 4.3, 3.5, { 'energy-kcal_100g': 99 }) }, 'J')[6], 99);
 eq('no name dropped', transform({ code: '12345678', nutriments: N(1, 1, 1) }, 'A'), null);
 eq('bad barcode dropped', transform({ code: 'abc', product_name: 'x', nutriments: N(1, 1, 1) }, 'A'), null);
 eq('silly pack ignored', transform({ code: '12345678', product_name: 'x', product_quantity: '0', nutriments: N(1, 1, 1) }, 'A')[4], null);

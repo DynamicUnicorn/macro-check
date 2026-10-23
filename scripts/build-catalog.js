@@ -59,6 +59,10 @@ function transform(prod, shopLetter) {
   if (kcal == null) { const kj = num(n.energy_100g); if (kj != null) kcal = kj / 4.184; }
   if (kcal == null) kcal = 4 * p + 9 * f + 4 * c;
   if (kcal < 0 || kcal > 950) return null;
+  // Label kcal must agree with the macros (4/9/4 + 2 per g fibre), same tolerance as the app's label check.
+  // Disagreeing entries are crowd-sourcing errors and would top "purest source" rankings with impossible values.
+  const fib = num(n.fiber_100g) || 0, computed = 4 * p + 9 * f + 4 * c + 2 * Math.max(0, fib);
+  if (Math.abs(kcal - computed) > Math.max(25, 0.15 * Math.max(kcal, computed))) return null;
   const name = String(prod.product_name_nl || prod.product_name || '').trim().replace(/\s+/g, ' ');
   if (!name) return null;
   const brand = String(prod.brands || '').split(',')[0].trim();
