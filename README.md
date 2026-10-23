@@ -170,7 +170,7 @@ The site is served by **GitHub Pages** from the `main` branch, root folder, of `
 
 When changing any app file:
 1. Run the tests: `npm test` (see below).
-2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v7` → `macro-check-v8`). Without this, phones keep showing the cached old version.
+2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v8` → `macro-check-v9`). Without this, phones keep showing the cached old version.
 3. Commit and push to `main`.
 4. On the phone, close and reopen the app once to load the new version.
 
@@ -269,6 +269,7 @@ The app can keep a copy of your **product library** in a **private** repo, `Dyna
 
 All dates dd/mm/yyyy.
 
+- **23/10/2026 – v8**: readable link colour in dark mode.
 - **23/10/2026 – v7**: Catalogue of AH / Jumbo / Picnic products from Open Food Facts, rebuilt weekly on GitHub; preview and save to library; Fill my gap can search the catalogue; offline barcode fallback.
 - **23/10/2026 – v6**: *Sync with GitHub*: product library to a private repo, prices merged back in. Targets and token never leave the phone.
 - **23/10/2026 – tooling**: tests moved to `tests/`, made path-independent, runnable with `npm test` on any machine and on GitHub Actions; `CLAUDE.md` added.
