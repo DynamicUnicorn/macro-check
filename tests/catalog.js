@@ -20,6 +20,8 @@ eq('impossible macros dropped', transform({ code: '12345678', product_name: 'x',
 eq('impossible kcal dropped', transform({ code: '12345678', product_name: 'x', nutriments: N(1, 1, 1, { 'energy-kcal_100g': 2000 }) }, 'A'), null);
 eq('kJ path also checked against macros', transform({ code: '12345678', product_name: 'x', nutriments: N(1, 1, 1, { energy_100g: 418.4 }) }, 'J'), null);
 eq('kcal contradicting macros dropped', transform({ code: '12345678', product_name: 'cottage', nutriments: N(11.8, 1, 3, { 'energy-kcal_100g': 23 }) }, 'J'), null);
+eq('low-kcal mismatch dropped (26 vs ~49)', transform({ code: '12345678', product_name: 'kwark', nutriments: N(8.8, 0.1, 3.2, { 'energy-kcal_100g': 26 }) }, 'P'), null);
+eq('small rounding difference kept', transform({ code: '12345678', product_name: 'komkommer', nutriments: N(0.7, 0.1, 1.8, { 'energy-kcal_100g': 14 }) }, 'A')[6], 14);
 eq('kcal agreeing with macros kept', transform({ code: '12345678', product_name: 'cottage', nutriments: N(11.8, 4.3, 3.5, { 'energy-kcal_100g': 99 }) }, 'J')[6], 99);
 eq('no name dropped', transform({ code: '12345678', nutriments: N(1, 1, 1) }, 'A'), null);
 eq('bad barcode dropped', transform({ code: 'abc', product_name: 'x', nutriments: N(1, 1, 1) }, 'A'), null);
