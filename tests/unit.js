@@ -218,6 +218,9 @@ const ciAlt = MC.catalogItems({ columns: catJson.columns.concat(['alt']), rows: 
 eq('alt barcodes parsed', JSON.stringify(ciAlt[0].alt), JSON.stringify(['2369283205389', '0023023291036']));
 eq('itemCodes strips leading zeros', JSON.stringify(MC.itemCodes(ciAlt[0])), JSON.stringify(['8719587412480', '2369283205389', '23023291036']));
 eq('old catalogue without alt still works', JSON.stringify(ci[0].alt), '[]');
+const ciN = MC.catalogItems({ columns: catJson.columns.concat(['alt', 'altn']), rows: [catJson.rows[1].concat(['', 'Tonijn Steak Vers | Geelvin tonijnsteak'])] });
+eq('alt names parsed', JSON.stringify(ciN[0].altNames), JSON.stringify(['Tonijn Steak Vers', 'Geelvin tonijnsteak']));
+eq('search finds merged name', MC.matches(ciN[0], 'geelvin'), true);
 
 console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
 process.exit(fails ? 1 : 0);

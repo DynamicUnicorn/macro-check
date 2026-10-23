@@ -1,5 +1,5 @@
 // Run: npm test  (or: node tests/catalog.js) — tests the catalogue builder with a fake Open Food Facts export.
-const { transform, addRow, buildFromLines, detectShops, parseQuantity, dedupe, brandFamily, COLUMNS } = require('../scripts/build-catalog.js');
+const { transform, addRow, buildFromLines, detectShops, parseQuantity, dedupe, mergeSimilar, similarNames, brandFamily, COLUMNS } = require('../scripts/build-catalog.js');
 let fails = 0;
 function eq(name, got, want) {
   const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -8,7 +8,7 @@ function eq(name, got, want) {
 const N = (p, f, c, extra) => Object.assign({ proteins_100g: p, fat_100g: f, carbohydrates_100g: c }, extra || {});
 const quark = { code: '8719587412480', product_name: 'Lactosevrije magere kwark', brands: 'AH, Albert Heijn', product_quantity: '500',
   product_quantity_unit: 'g', nutriments: N(10, 0.2, 3.8, { 'energy-kcal_100g': 57, fiber_100g: 0, sugars_100g: 3.8 }) };
-eq('transform basic', transform(quark, 'A'), ['8719587412480', 'Lactosevrije magere kwark', 'AH', 'A', 500, 'g', 57, 10, 0.2, 3.8, 0, 3.8, '']);
+eq('transform basic', transform(quark, 'A'), ['8719587412480', 'Lactosevrije magere kwark', 'AH', 'A', 500, 'g', 57, 10, 0.2, 3.8, 0, 3.8, '', '']);
 eq('columns length matches', transform(quark, 'A').length, COLUMNS.length);
 eq('prefers Dutch name', transform(Object.assign({}, quark, { product_name_nl: 'Kwark NL' }), 'A')[1], 'Kwark NL');
 eq('kcal from kJ', transform({ code: '12345678', product_name: 'x', nutriments: N(10, 4, 5, { energy_100g: 418.4 }) }, 'J')[6], 100);
@@ -49,7 +49,7 @@ eq('qty none', parseQuantity('1 stuk'), { pack: null, unit: null });
 eq('pack from text in transform', transform({ code: '12345678', product_name: 'x', quantity: '250 g', nutriments: N(1, 1, 1) }, 'A')[4], 250);
 
 // ---- duplicates ----
-const R = (code, name, brand, shops, pack, kcal, p, f, c) => [code, name, brand, shops, pack, 'g', kcal, p, f, c, null, null, ''];
+const R = (code, name, brand, shops, pack, kcal, p, f, c) => [code, name, brand, shops, pack, 'g', kcal, p, f, c, null, null, '', ''];
 eq('brand family', [brandFamily('Albert Heijn'), brandFamily('AH Excellent'), brandFamily('JUMBO'), brandFamily('Unox')], ['ah', 'ah', 'jumbo', 'unox']);
 const dd = dedupe([
   R('2369283505649', 'Geelvin tonijnsteak', 'JUMBO', 'J', null, 88, 21.3, 0.3, 0.2),
@@ -81,6 +81,32 @@ const dd2 = dedupe([
 ]);
 eq('shop prefix and spacing ignored', dd2.rows.length, 4);
 eq('different words not merged (penne vs penne rigate)', dd2.rows.filter((r) => /penne/i.test(r[1])).length, 2);
+
+// ---- tier 2: same product, different names ----
+eq('similar: geelvin = yellowfin', similarNames('Geelvin tonijnsteak', 'Tonijnsteak Yellowfin'), true);
+eq('similar: filler words ignored', similarNames('Tonijn Steak Vers', 'Geelvin tonijnsteak ontdooid'), true);
+eq('not similar: flavours', similarNames('Aardbei drinkyoghurt', 'Drink yoghurt framboos'), false);
+eq('not similar: seasoning', similarNames('Kipfilet Mexicaans', 'Kipfilet plakjes Bbq'), false);
+eq('not similar: cheese age', similarNames('Goudse kaas jong', 'Goudse kaas belegen'), false);
+eq('not similar: no shared core', similarNames('Penne', 'Fusilli'), false);
+const ms = mergeSimilar([
+  R('2369283505649', 'Geelvin tonijnsteak', 'JUMBO', 'J', null, 88, 21.3, 0.3, 0.2),
+  R('8718452581399', 'Tonijnsteak Yellowfin', 'Jumbo', 'J', 250, 88, 21.3, 0.3, 0.2),
+  R('2369283304822', 'Tonijn Steak Vers', 'Jumbo', 'J', null, 88, 21.3, 0.3, 0),
+  R('2369283305560', 'Geelvin tonijnsteak ontdooid', 'Jumbo', 'J', null, 88, 21.3, 0.3, 0.2),
+  R('8718452581313', 'Tonijn Steak', 'Jumbo', 'J', null, 101, 23, 1, 0),
+  R('8718265891234', 'Tonijnsteak', 'AH', 'A', 150, 88, 21.3, 0.3, 0.2),
+  R('8710000000001', 'Aardbei drinkyoghurt', 'AH', 'A', 500, 27, 3.1, 0.1, 4),
+  R('8710000000002', 'Drink yoghurt framboos', 'AH', 'A', 500, 27, 3.1, 0.1, 4)
+]);
+const yf = ms.rows.find((r) => r[1] === 'Tonijnsteak Yellowfin');
+eq('jumbo tuna steaks merged into regular-barcode entry', ms.rows.filter((r) => r[2].toLowerCase() === 'jumbo' && r[6] === 88).length, 1);
+eq('merged names kept', yf[13].split(' | ').sort(), ['Geelvin tonijnsteak', 'Geelvin tonijnsteak ontdooid', 'Tonijn Steak Vers']);
+eq('merged barcodes kept', yf[12].split(' ').length, 3);
+eq('different nutrition not merged', ms.rows.some((r) => r[0] === '8718452581313'), true);
+eq('other shop brand not merged', ms.rows.some((r) => r[0] === '8718265891234'), true);
+eq('flavours not merged', ms.rows.filter((r) => /yoghurt/i.test(r[1])).length, 2);
+eq('tier 2 merged count', ms.merged, 3);
 
 // ---- full build from a fake export ----
 const H = ['code', 'product_name', 'brands', 'brands_tags', 'stores', 'countries_tags', 'quantity',

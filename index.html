@@ -269,7 +269,7 @@
     </div>
     <div class="card muted">
       Product data comes from <b>Open Food Facts</b> (crowd-sourced, so check the numbers against the label).
-      Only the barcode you scan is sent to them (and to Open Prices for price suggestions). Macro Check v9
+      Only the barcode you scan is sent to them (and to Open Prices for price suggestions). Macro Check v10
     </div>
   </section>
 </main>
@@ -1039,6 +1039,7 @@
       var mine = ownedCopy(it);
       h += '<div class="lib-row" data-id="' + esc(it.id) + '"><div class="rank">' + (i + 1) + '</div>' +
         '<div><div class="nm">' + esc(it.name) + (mine ? ' <span class="inlib">✓ mine</span>' : '') + '</div>' +
+        (it.altNames && it.altNames.length ? '<div class="sub" style="font-style:italic">also: ' + esc(it.altNames.slice(0, 3).join(' · ')) + (it.altNames.length > 3 ? ' · +' + (it.altNames.length - 3) : '') + '</div>' : '') +
         '<div class="sub">' + shopBadges(it.shops) + esc(it.brand) + (it.pack ? ' · ' + fmt(it.pack, 0) + ' ' + u : '') +
         ' · ' + fmt(m.kcal, 0) + ' kcal · P ' + fmt(m.p100) + ' · F ' + fmt(m.f100) + ' · C ' + fmt(m.c100) + ' /100 ' + u + '</div></div>' +
         '<div class="val">' + (def.text || v == null ? '' : fmt(v, def.dec) + '<small> ' + def.unit + '</small>') + '</div>' +

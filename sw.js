@@ -1,5 +1,5 @@
 // Offline shell cache. Bump VERSION whenever any app file changes so phones pick up the update.
-const VERSION = 'macro-check-v9';
+const VERSION = 'macro-check-v10';
 const SHELL = ['./', 'index.html', 'core.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -19,6 +19,16 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   // Only handle same-origin GETs; Open Food Facts and the scanner library go straight to the network.
   if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+  // The catalogue changes weekly: always try the network first, use the stored copy only when offline.
+  if (url.pathname.endsWith('/catalog/catalog.json')) {
+    e.respondWith(
+      fetch(req, { cache: 'no-cache' }).then((res) => {
+        if (res && res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
+        return res;
+      }).catch(() => caches.match(req))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(req).then((hit) => {
       const net = fetch(req).then((res) => {

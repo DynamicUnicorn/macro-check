@@ -52,7 +52,7 @@
   function matches(prod, q) {
     q = (q || '').trim().toLowerCase();
     if (!q) return true;
-    return [prod.alias, prod.name, prod.brand].join(' ').toLowerCase().indexOf(q) >= 0;
+    return [prod.alias, prod.name, prod.brand].concat(prod.altNames || []).join(' ').toLowerCase().indexOf(q) >= 0;
   }
 
   // ---------- per-product metrics ----------
@@ -324,6 +324,7 @@
         shops: get(r, 'shops') || '', pack: get(r, 'pack'), unit: get(r, 'unit') === 'ml' ? 'ml' : 'g',
         kcal: get(r, 'kcal'), p: get(r, 'p'), f: get(r, 'f'), c: get(r, 'c'), fiber: get(r, 'fiber'), sugar: get(r, 'sugar'),
         alt: get(r, 'alt') ? String(get(r, 'alt')).split(' ').filter(Boolean) : [],   // other barcodes of merged duplicates
+        altNames: get(r, 'altn') ? String(get(r, 'altn')).split(' | ').filter(Boolean) : [], // other names of merged duplicates
         source: 'catalog'
       };
     });

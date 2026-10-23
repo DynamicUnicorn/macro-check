@@ -15,7 +15,7 @@ const path = require('path');
 const UA = 'MacroCheck/1.0 (personal nutrition web app; github.com/DynamicUnicorn/macro-check)';
 // Official nightly export (tab-separated, gzipped, ~0.9 GB). Open Food Facts asks bulk users to use this, not the API.
 const EXPORT_URL = 'https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz';
-const COLUMNS = ['code', 'name', 'brand', 'shops', 'pack', 'unit', 'kcal', 'p', 'f', 'c', 'fiber', 'sugar', 'alt'];
+const COLUMNS = ['code', 'name', 'brand', 'shops', 'pack', 'unit', 'kcal', 'p', 'f', 'c', 'fiber', 'sugar', 'alt', 'altn'];
 const SHOP_NAMES = { A: 'Albert Heijn', J: 'Jumbo', P: 'Picnic' };
 
 // Which of our shops a product is linked to, from the free-text "stores" field and the brand tags.
@@ -73,7 +73,7 @@ function transform(prod, shopLetter) {
   if (pack != null && (pack <= 0 || pack > 20000)) pack = null;
   const fiber = num(n.fiber_100g), sugar = num(n.sugars_100g);
   return [String(prod.code), name.slice(0, 120), brand.slice(0, 60), shopLetter, r1(pack), unit,
-    Math.round(kcal), r1(p), r1(f), r1(c), fiber == null || fiber < 0 ? null : r1(fiber), sugar == null || sugar < 0 ? null : r1(sugar), ''];
+    Math.round(kcal), r1(p), r1(f), r1(c), fiber == null || fiber < 0 ? null : r1(fiber), sugar == null || sugar < 0 ? null : r1(sugar), '', ''];
 }
 
 // Merge rows by barcode: shops are combined; the first complete row wins for the data.
@@ -137,6 +137,82 @@ function dedupe(rows) {
   return { rows: out, merged: merged };
 }
 
+// ---- tier 2: same product under different names ----
+// Same shop brand + nutrition equal within rounding (kcal ±2, P/F/C ±0.3 g) + names sharing a core of 6+ letters
+// ("Geelvin tonijnsteak" = "Tonijnsteak Yellowfin" = "Tonijn Steak Vers"). Words that don't identify the product
+// are ignored; names that differ by a flavour/variety/cut word are never merged (identical labels are common there).
+const FILLER = new Set(('ah jumbo picnic albert heijn bio biologisch biologische naturel vers verse ontdooid diepvries ' +
+  'vriezer bevroren excellent basic terra gesneden plakken plakjes stuks stuk pack voordeelverpakking voordeelpak ' +
+  'grootverpakking xl ca g gr gram kg ml cl l x de het een en met van op in a la à geelvin yellowfin').split(' '));
+const VARIANT = ['aardbei', 'framboos', 'kers', 'mango', 'perzik', 'peach', 'banaan', 'appel', 'peer', 'citroen', 'lemon',
+  'limoen', 'sinaas', 'orange', 'bosvrucht', 'cassis', 'vanil', 'caramel', 'karamel', 'chocola', 'choco', 'cacao', 'mokka',
+  'hazelnoot', 'kokos', 'honing', 'kaneel', 'komijn', 'peper', 'paprika', 'kruiden', 'knoflook', 'ui', 'tomaat', 'pesto',
+  'naturel', 'gezouten', 'ongezouten', 'zout', 'zoet', 'zuur', 'pittig', 'spicy', 'mild', 'jong', 'belegen', 'oud',
+  'extra', 'bruisend', 'koolzuur', 'licht', 'kruimig', 'vastkokend', 'friet', 'hamlap', 'speklap', 'schnitzel', 'karbonade',
+  'filet', 'drumstick', 'dij', 'vleugel', 'gehakt', 'burger', 'worst', 'rood', 'wit', 'groen', 'geel', 'zwart', 'bruin',
+  'volkoren', 'spelt', 'rogge', 'mais', 'rijst', 'penne', 'fusilli', 'spaghetti', 'macaroni', 'lasagne', 'tagliatelle',
+  'mager', 'halfvol', 'vol', 'light', 'zero', 'suikervrij', 'truffel', 'tartufo', 'grof', 'grove', 'crunchy', 'smooth',
+  'mexica', 'bbq', 'barbecue', 'curry', 'kerrie', 'tandoori', 'italia', 'provenc', 'gerookt', 'gegrild', 'shoarma', 'gyros',
+  'walnoot', 'amandel', 'pinda', 'sesam', 'teriyaki', 'sweet', 'chili', 'kip', 'rund', 'varken', 'kalkoen', 'zalm', 'tonijn'];
+const words = (s) => normName(s).split(' ').filter((w) => w && !FILLER.has(w) && !/^\d+$/.test(w));
+function lcsLen(a, b) {
+  let best = 0, prev = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = new Array(b.length + 1).fill(0);
+    for (let j = 1; j <= b.length; j++) if (a[i - 1] === b[j - 1]) { cur[j] = prev[j - 1] + 1; if (cur[j] > best) best = cur[j]; }
+    prev = cur;
+  }
+  return best;
+}
+function similarNames(a, b) {
+  const wa = words(a), wb = words(b), ka = wa.join(''), kb = wb.join('');
+  if (!ka || !kb || lcsLen(ka, kb) < 6) return false;
+  // a word found in only one name (not even inside a word of the other, e.g. "tonijn" in "tonijnsteak") must not be a variant word
+  const only = (xs, ys) => xs.filter((w) => !ys.some((y) => y.includes(w) || w.includes(y)));
+  return only(wa, wb).concat(only(wb, wa)).every((w) => !VARIANT.some((v) => w.includes(v)));
+}
+// Nutrition equal within label rounding: kcal ±2, protein/fat/carbs ±0.3 g.
+const nearSame = (a, b) => Math.abs(a[6] - b[6]) <= 2 && [7, 8, 9].every((i) => Math.abs(a[i] - b[i]) <= 0.3);
+function mergeSimilar(rows) {
+  const groups = new Map();
+  rows.forEach((r) => { const k = brandFamily(r[2]); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+  const out = [];
+  let merged = 0;
+  for (const list of groups.values()) {
+    // best entry first (regular barcode, then with pack size); clusters only form between near-identical nutrition
+    list.sort((a, b) => (isInStore(a[0]) - isInStore(b[0])) || ((a[4] == null) - (b[4] == null)) || a[0].localeCompare(b[0]));
+    const byKcal = new Map();          // kcal bucket -> clusters, to avoid comparing everything with everything
+    const clusters = [];
+    for (const r of list) {
+      const b = Math.round(r[6] / 5);
+      let home = null;
+      for (const bb of [b - 1, b, b + 1]) {
+        for (const cl of byKcal.get(bb) || []) {
+          if (cl.every((m) => nearSame(m, r) && similarNames(m[1], r[1]))) { home = cl; break; }   // must match every member
+        }
+        if (home) break;
+      }
+      if (home) home.push(r);
+      else { const cl = [r]; clusters.push(cl); if (!byKcal.has(b)) byKcal.set(b, []); byKcal.get(b).push(cl); }
+    }
+    for (const cl of clusters) {
+      const keep = cl[0].slice();
+      if (cl.length > 1) {
+        const shops = new Set(cl.map((r) => r[3]).join('').split(''));
+        keep[3] = ['A', 'J', 'P'].filter((x) => shops.has(x)).join('');
+        if (keep[4] == null) { const wp = cl.find((r) => r[4] != null); if (wp) keep[4] = wp[4]; }
+        keep[12] = cl.flatMap((r, i) => (i ? [r[0]] : []).concat(r[12] ? r[12].split(' ') : [])).join(' ');
+        const names = new Set([nameKey(keep[1])]);
+        keep[13] = cl.slice(1).map((r) => r[1]).concat(cl[0][13] ? cl[0][13].split(' | ') : [])
+          .filter((n) => { const k = nameKey(n); if (names.has(k)) return false; names.add(k); return true; }).join(' | ');
+        merged += cl.length - 1;
+      }
+      out.push(keep);
+    }
+  }
+  return { rows: out, merged: merged };
+}
+
 // One tab-separated export line -> API-like product object (only the fields we use), or null.
 function lineToProduct(cols, ix) {
   const g = (k) => (ix[k] == null ? '' : cols[ix[k]] || '');
@@ -177,8 +253,9 @@ async function buildFromLines(lines, opts) {
   }
   if (!ix) throw new Error('Export was empty');
   const dd = dedupe(Array.from(map.values()));
-  stats.merged = dd.merged;
-  const rows = dd.rows.sort((a, b) => a[1].localeCompare(b[1], 'nl'));
+  const ms = mergeSimilar(dd.rows);
+  stats.merged = dd.merged + ms.merged;
+  const rows = ms.rows.sort((a, b) => a[1].localeCompare(b[1], 'nl'));
   const counts = { A: 0, J: 0, P: 0 };
   rows.forEach((r) => r[3].split('').forEach((x) => counts[x]++));
   return {
@@ -227,5 +304,5 @@ async function main() {
     ', duplicates merged ' + cat.stats.merged + '.');
 }
 
-module.exports = { transform, addRow, buildFromLines, detectShops, parseQuantity, lineToProduct, dedupe, brandFamily, COLUMNS };
+module.exports = { transform, addRow, buildFromLines, detectShops, parseQuantity, lineToProduct, dedupe, mergeSimilar, similarNames, brandFamily, COLUMNS };
 if (require.main === module) main().catch((e) => { console.error('::error::' + (e && e.message || e)); console.error(e); process.exit(1); });
