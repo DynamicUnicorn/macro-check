@@ -198,5 +198,22 @@ eq('updated list', mp.updated.sort().join(','), 'a,b');
 eq('inputs not mutated', loc.a.price === null && loc.b.priceHistory.length === 1, true);
 eq('idempotent second merge', MC.mergePrices(mp.products, rem).updated.length, 0);
 
+// ---- catalogue ----
+const catJson = { columns: ['code', 'name', 'brand', 'shops', 'pack', 'unit', 'kcal', 'p', 'f', 'c', 'fiber', 'sugar'],
+  rows: [['8719587412480', 'Magere kwark', 'AH', 'A', 500, 'g', 57, 10, 0.2, 3.8, 0, 3.8],
+         ['20000000', 'Penne', 'Jumbo', 'J', 500, 'g', 350, 12, 1.5, 70, 3, 3],
+         ['30000000', 'Halfvolle melk', 'Picnic', 'AP', 1000, 'ml', 46, 3.5, 1.5, 4.7, null, 4.7]] };
+const ci = MC.catalogItems(catJson);
+eq('catalog items count', ci.length, 3);
+eq('catalog item fields', JSON.stringify([ci[0].id, ci[0].barcode, ci[0].p, ci[0].unit, ci[2].unit, ci[2].fiber]), JSON.stringify(['cat:8719587412480', '8719587412480', 10, 'g', 'ml', null]));
+eq('catalog items work with metrics', MC.metrics(ci[0]).pPer100kcal, 10 / 57 * 100);
+eq('filter by shop', MC.filterCatalog(ci, 'J').map(i => i.name).join(','), 'Penne');
+eq('filter multi-shop item', MC.filterCatalog(ci, 'P').map(i => i.name).join(','), 'Halfvolle melk');
+eq('filter shop + search', MC.filterCatalog(ci, 'AJP', 'kwark').length, 1);
+eq('filter no shops', MC.filterCatalog(ci, '').length, 0);
+eq('shop label', MC.shopLabel('AP'), 'AH · Picnic');
+eq('catalog in fill gap', MC.fillGap(ci, { p: 40, f: 10, c: 30 }, 'p')[0].prod.name, 'Magere kwark');
+eq('bad catalog -> empty', MC.catalogItems({}).length, 0);
+
 console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
 process.exit(fails ? 1 : 0);

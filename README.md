@@ -6,7 +6,7 @@ A small phone web app for the supermarket aisle. Scan a product's barcode (or ty
 - how "pure" a source of protein, fat or carbs it is,
 - what it costs per kg/litre and per gram of each macro,
 - how it fits your training-day and rest-day targets, or what you have left today,
-- which product in your library best fills what you still need to eat.
+- which product in your library, or anywhere in the AH / Jumbo / Picnic catalogue, best fills what you still need to eat.
 
 It is a companion to MacroFactor, not a replacement: MacroFactor tracks the diet, Macro Check judges whether a product is worth buying.
 
@@ -37,7 +37,7 @@ Live app: https://dynamicunicorn.github.io/macro-check/
 2. Menu → **Add to Home screen**. It then opens like an app and works offline (except lookups).
 3. Go to **Settings** and fill in your **training day** and **rest day** targets (protein, fat, carbs in grams). Calories are calculated as 4×protein + 4×carbs + 9×fat. You only redo this when your targets change.
 
-The app has four tabs: **Scan**, **Library**, **Tools** and **Settings**.
+The app has five tabs: **Scan**, **Library**, **Catalogue**, **Tools** and **Settings**.
 
 ### Scan tab (top to bottom)
 | Section | What it's for |
@@ -75,8 +75,14 @@ Quick chips: *Pure protein*, *Pure fat*, *Pure carbs*, *Cheapest protein/fat/car
 - **Empty prices** are filled from Open Prices, but only with a price from a Dutch shop. Prices you already have are never touched.
 - Manual items (no barcode) are skipped.
 
+### Catalogue tab
+Thousands of products sold at **Albert Heijn, Jumbo and Picnic**, taken from Open Food Facts and refreshed every week (see [The catalogue](#the-catalogue)).
+- **Shop chips** (AH / Jumbo / Picnic) filter by shop. **Quick chips**: *Pure protein*, *Pure fat*, *Pure carbs*, *Lowest kcal*, *Most fibre*, *A–Z*. The dropdown has every macro metric (price metrics are left out: the catalogue has no prices). The search box matches name and brand.
+- 60 results at a time; *Show more* loads the next 60. Products you already own are marked **✓ mine**.
+- **Tap a product** to open it on the Scan tab as a *preview*: all the numbers and the fit for your day, without saving. **Save**, or editing anything (price, alias, a serving), adds it to your library. *Close* discards it. Opening a product you already own opens your own copy, with your edits.
+
 ### Tools tab
-**Fill my gap:** enter what you still need to eat (or tap *Use "Left today"*), and choose what to fill mostly: calories, protein, fat or carbs. Every library item gets the **largest amount you can eat without going over any macro or the calories**, ranked by how much of your chosen target that amount fills. Each row shows the amount, number of packs, cost, the macros it delivers and which macro is the limit. Tap a row to open the item with that amount filled in.
+**Fill my gap:** enter what you still need to eat (or tap *Use "Left today"*), choose what to fill mostly (calories, protein, fat or carbs), and where to look: **My library**, the **Catalogue** (with shop chips), or **Both**. Catalogue products you already own are shown once, as your library copy. Every library item gets the **largest amount you can eat without going over any macro or the calories**, ranked by how much of your chosen target that amount fills. Each row shows the amount, number of packs, cost (library items with a price), the macros it delivers and which macro is the limit. Tap a row to open the item with that amount filled in (catalogue rows open as a preview).
 
 **Compare two items:** tap each button to open a compact, searchable list (type part of your name, the product name or the brand), then pick two products and see every library metric side by side. The better value per line is green, and the bottom line counts how many lines each wins. Not every line matters for your goal (a cheaper kcal-per-€ isn't a win if you're cutting), so read the lines you care about.
 
@@ -149,6 +155,10 @@ Both databases are crowd-sourced: always glance at the label. If a product isn't
 | `tests/ui-smoke.js` | UI test: runs the real `index.html` in a simulated browser (jsdom), with Open Food Facts and Open Prices mocked, and clicks through every feature. |
 | `package.json`, `package-lock.json` | Test scripts and the one test dependency (jsdom). Not used by the app itself. |
 | `.github/workflows/test.yml` | Runs all tests on GitHub on every push. |
+| `scripts/build-catalog.js` | Builds the catalogue from Open Food Facts (no dependencies). |
+| `catalog/catalog.json` | The catalogue itself, written by the weekly workflow. Don't edit by hand. |
+| `.github/workflows/catalog.yml` | Weekly/on-demand catalogue build; commits the result and republishes the site. |
+| `tests/catalog.js` | Tests for the catalogue builder, against a fake Open Food Facts API. |
 | `CLAUDE.md` | Project conventions for Claude when working on this repo in a new session. |
 | `README.md` | This document. |
 
@@ -160,7 +170,7 @@ The site is served by **GitHub Pages** from the `main` branch, root folder, of `
 
 When changing any app file:
 1. Run the tests: `npm test` (see below).
-2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v6` → `macro-check-v7`). Without this, phones keep showing the cached old version.
+2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v7` → `macro-check-v8`). Without this, phones keep showing the cached old version.
 3. Commit and push to `main`.
 4. On the phone, close and reopen the app once to load the new version.
 
@@ -178,7 +188,8 @@ npm test         # runs both test suites
 ```
 
 - `npm run test:unit`: hand-calculated checks for parsing (comma decimals), scaling, every metric, the budget fit and max amount, liquids, price per kg/litre, sorting (including A–Z), aliases and search, Fill my gap, Compare, the sync price-merge rules, the rescan merge rules (edited fields kept), price history, CSV output and barcode checksums. All test products are synthetic examples, not real label data.
-- `npm run test:ui`: loads the app in a simulated browser and checks targets, manual entry, barcode lookup (mocked), crowd prices, layout order, liquids, servings, price history, the library and its sorting, aliases, the picker, Fill my gap, Compare, a full rescan and GitHub sync (against a mocked GitHub API). It doesn't cover the camera, the flashlight or real network calls.
+- `npm run test:catalog`: the catalogue builder's filtering rules (missing or impossible macros, kJ conversion, liquids, shop merging) and a full run against a fake API, including paging, rate-limit waits and a retried 429.
+- `npm run test:ui`: loads the app in a simulated browser and checks targets, manual entry, barcode lookup (mocked), crowd prices, layout order, liquids, servings, price history, the library and its sorting, aliases, the picker, Fill my gap, Compare, a full rescan, GitHub sync (against a mocked GitHub API), and the catalogue: filters, search, preview/save/close, Fill my gap over the catalogue, and the offline barcode fallback. It doesn't cover the camera, the flashlight or real network calls.
 
 GitHub also runs `npm test` on every push (the **Actions** tab). A red cross on a commit means a test failed.
 
@@ -194,6 +205,22 @@ Everything needed lives in the GitHub repo; nothing depends on a specific comput
 4. Follow [Updating and deploying](#updating-and-deploying).
 
 With Claude: open the same chat on any device, or start a new one and ask Claude to attach `DynamicUnicorn/macro-check`; `CLAUDE.md` gives it the project conventions.
+
+---
+
+## The catalogue
+
+`catalog/catalog.json` is built by `scripts/build-catalog.js`, running on GitHub Actions (`.github/workflows/catalog.yml`):
+- **When:** every Monday at 03:23 UTC, or on demand (GitHub → Actions → *catalogue* → *Run workflow*).
+- **What:** the Open Food Facts search API, Netherlands only, products tagged with the **store** or **brand** Albert Heijn/AH, Jumbo or Picnic. A product found under several shops gets all of them.
+- **Kept:** products with protein, fat and carbs per 100 g/ml. kcal comes from the label, else kJ ÷ 4.184, else 4/4/9. Products with impossible values (P+F+C over 105 g, kcal over 950, negative values) or no name are dropped.
+- **Stored per product:** barcode, name (Dutch where available), brand, shops, pack size, g/ml, kcal, protein, fat, carbs, fibre, sugar.
+- **Safety:** the job refuses to replace the catalogue with one less than 60 % of the previous size (an API outage shouldn't wipe it), and it respects the 10-searches-a-minute limit, so a full build takes a while.
+- The app downloads the file the first time you open the Catalogue (or a catalogue search in Fill my gap) and then keeps it for offline use. If Open Food Facts is unreachable when you scan, the barcode is looked up in the catalogue instead.
+
+**How complete is it?** Only as complete as Open Food Facts: products that someone has added and tagged with one of these shops. Store tags are often missing, so some products sold at a shop won't show up under it. New or corrected products appear in the Open Food Facts API **immediately** after they're saved, so they reach the catalogue at the next weekly build. Products you add through **MacroFactor's food submission** (with the consent slider on) are sent to Open Food Facts, so they flow in too, but MacroFactor doesn't say how quickly it forwards them.
+
+**Licence:** the catalogue is a derived database of Open Food Facts, available under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/). Data © Open Food Facts contributors. Keep this attribution if you reuse it.
 
 ---
 
@@ -231,6 +258,7 @@ The app can keep a copy of your **product library** in a **private** repo, `Dyna
 - **MacroFactor** has no public API, so "Left today" is typed in by hand.
 - Liquids are handled per 100 ml throughout; there is no conversion between grams and millilitres.
 - **Flashlight** depends on the phone and browser exposing torch control; on phones that don't, the button stays hidden.
+- **Catalogue** coverage depends on Open Food Facts' store and brand tags. Missing tags mean missing products; wrong labels mean wrong numbers. It has no prices.
 - **Fill my gap** ignores pack size: it may suggest 2.3 packs. It also ranks one product at a time, not combinations.
 - **Sync** stores the token in the phone's browser storage. Anyone with your unlocked phone could use it, but only on `macro-check-data`. Use *Forget token* if you lend your phone out. `library.json` must stay under 1 MB (roughly 1,500 items) for GitHub's contents API.
 - **Rescan** has to stay open while it runs; leaving the app pauses it. Run it again to finish; already-updated items are simply re-checked.
@@ -241,6 +269,7 @@ The app can keep a copy of your **product library** in a **private** repo, `Dyna
 
 All dates dd/mm/yyyy.
 
+- **23/10/2026 – v7**: Catalogue of AH / Jumbo / Picnic products from Open Food Facts, rebuilt weekly on GitHub; preview and save to library; Fill my gap can search the catalogue; offline barcode fallback.
 - **23/10/2026 – v6**: *Sync with GitHub*: product library to a private repo, prices merged back in. Targets and token never leave the phone.
 - **23/10/2026 – tooling**: tests moved to `tests/`, made path-independent, runnable with `npm test` on any machine and on GitHub Actions; `CLAUDE.md` added.
 - **23/10/2026 – v5**: custom names (aliases) shown everywhere without changing the product name; compact searchable item picker for Compare.

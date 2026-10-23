@@ -120,6 +120,13 @@
   .pk .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pk small { color: var(--muted); white-space: nowrap; font-size: .75rem; }
   .pk.sel { color: var(--accent); font-weight: 700; }
+  .shop { display: inline-block; font-size: .68rem; font-weight: 700; padding: 1px 6px; border-radius: 6px; margin-right: 3px;
+    background: var(--chip); color: var(--muted); vertical-align: 1px; }
+  .shop.A { background: #00a0e2; color: #fff; } .shop.J { background: #f7c900; color: #222; } .shop.P { background: #e1171e; color: #fff; }
+  .inlib { color: var(--ok); font-size: .8rem; font-weight: 700; }
+  .prev { display: flex; gap: 8px; align-items: center; justify-content: space-between; border: 1px dashed var(--accent);
+    border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; font-size: .9rem; }
+  nav button { font-size: .72rem; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -159,6 +166,21 @@
     <div class="card" id="libList"></div>
   </section>
 
+  <section id="tab-cat" hidden>
+    <h1>Catalogue</h1>
+    <div class="card">
+      <div class="chips" id="catShops"></div>
+      <div class="chips" id="catQuick"></div>
+      <div style="display:flex;gap:8px">
+        <select id="catSort" aria-label="Sort catalogue by"></select>
+        <button id="catDir" class="small" style="min-width:92px"></button>
+      </div>
+      <input type="text" id="catSearch" placeholder="Search name or brand…" style="margin-top:8px" autocomplete="off">
+      <div id="catInfo" class="muted" style="font-size:.85rem;margin-top:6px"></div>
+    </div>
+    <div class="card" id="catList"></div>
+  </section>
+
   <section id="tab-tools" hidden>
     <h1>Tools</h1>
     <div class="card">
@@ -170,6 +192,10 @@
         <label class="f">Carbs g<input type="text" inputmode="decimal" id="g_c" autocomplete="off"></label>
       </div>
       <div class="chips"><button class="chip" id="gapFromRem">Use “Left today”</button></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px"><span class="muted">Search in:</span>
+        <div class="seg" id="gapSrc"><button data-s="lib">My library</button><button data-s="cat">Catalogue</button><button data-s="both">Both</button></div>
+      </div>
+      <div class="chips" id="gapShops"></div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted">Fill mostly:</span>
         <div class="seg" id="gapFocus">
           <button data-f="kcal">Calories</button><button data-f="p">Protein</button><button data-f="f">Fat</button><button data-f="c">Carbs</button>
@@ -242,7 +268,7 @@
     </div>
     <div class="card muted">
       Product data comes from <b>Open Food Facts</b> (crowd-sourced, so check the numbers against the label).
-      Only the barcode you scan is sent to them (and to Open Prices for price suggestions). Macro Check v6
+      Only the barcode you scan is sent to them (and to Open Prices for price suggestions). Macro Check v7
     </div>
   </section>
 </main>
@@ -250,6 +276,7 @@
 <nav>
   <button data-tab="scan" class="on"><b>📷</b>Scan</button>
   <button data-tab="lib"><b>📋</b>Library</button>
+  <button data-tab="cat"><b>🛒</b>Catalogue</button>
   <button data-tab="tools"><b>🎯</b>Tools</button>
   <button data-tab="set"><b>⚙️</b>Settings</button>
 </nav>
@@ -316,16 +343,21 @@
       source: 'manual', added: MC.dmy(), tracked: true, edited: {}
     }, o || {});
   }
-  function cur() { return state.currentId ? state.products[state.currentId] : null; }
+  function cur() { return state.preview || (state.currentId ? state.products[state.currentId] : null); }
+  function findByBarcode(code) {
+    var z = String(code || '').replace(/^0+/, '');
+    return z ? Object.values(state.products).find(function (p) { return p.barcode && String(p.barcode).replace(/^0+/, '') === z; }) : null;
+  }
   function markEdited(p, k) { if (!p.edited) p.edited = {}; p.edited[k] = true; }
   var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
   // ---------- tabs ----------
   function showTab(name) {
-    ['scan', 'lib', 'tools', 'set'].forEach(function (t) { $('#tab-' + t).hidden = t !== name; });
+    ['scan', 'lib', 'cat', 'tools', 'set'].forEach(function (t) { $('#tab-' + t).hidden = t !== name; });
     document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', b.dataset.tab === name); });
     if (name === 'lib') renderLib();
     if (name === 'tools') renderTools();
+    if (name === 'cat') renderCat();
     window.scrollTo(0, 0);
   }
   document.querySelectorAll('nav button').forEach(function (b) {
@@ -333,6 +365,7 @@
   });
 
   function openProduct(id, amount) {
+    state.preview = null;
     state.currentId = id;
     var p = state.products[id];
     if (p) { MC.ensureHistory(p); if (!Array.isArray(p.servings)) p.servings = []; }
@@ -364,6 +397,8 @@
     if (!p) { box.innerHTML = '<div class="card muted">Scan a barcode, or add an item manually, to see how it fits your day.</div>'; return; }
     box.innerHTML =
       '<div class="card">' +
+      (state.preview ? '<div class="prev"><span>From the catalogue (' + esc(MC.shopLabel(p.shops)) + '). Not in your library yet: editing anything saves it.</span>' +
+        '<button class="small primary" id="savePrev">Save</button></div>' : '') +
       '<label class="f">Your name for it (optional, shown everywhere)<input type="text" class="name" id="f_alias" placeholder="e.g. Quark" value="' + esc(p.alias || '') + '" autocomplete="off"></label>' +
       '<label class="f" style="margin-top:6px">Product name (from the label / Open Food Facts)<input type="text" id="f_name" placeholder="Product name" value="' + esc(p.name) + '" autocomplete="off"></label>' +
       '<div class="sub">' + esc(p.brand) + (p.brand && p.barcode ? ' · ' : '') + esc(p.barcode) +
@@ -384,7 +419,8 @@
       '<label class="f">Amount (' + U(p) + ')<input type="text" inputmode="decimal" id="amt" autocomplete="off" value="' + esc(state.amount == null ? '' : fmt(state.amount, 1)) + '"></label>' +
       '<div class="chips" id="amtChips"></div>' +
       '<div class="chips" id="srvChips"></div>' +
-      '<div class="row-actions" style="margin-top:10px"><button class="danger small" id="delItem">Delete this item</button></div>' +
+      (state.preview ? '<div class="row-actions" style="margin-top:10px"><button class="small" id="closePrev">Close</button></div>'
+        : '<div class="row-actions" style="margin-top:10px"><button class="danger small" id="delItem">Delete this item</button></div>') +
       '</div>';
     updateNotices(); updatePriceNote(); renderChips(); renderPriceHint(); renderPriceHist();
   }
@@ -471,8 +507,16 @@
     }).join('') + '<button class="chip" id="addSrv">＋ Serving</button>';
   }
 
+  function promotePreview() {
+    var p = state.preview; if (!p) return;
+    state.products[p.id] = p; state.currentId = p.id; state.preview = null; saveProducts();
+    var b = document.querySelector('.prev'); if (b) b.remove();
+    var cp = $('#closePrev'); if (cp) cp.outerHTML = '<button class="danger small" id="delItem">Delete this item</button>';
+    toast('Saved to your library');
+  }
   $('#item').addEventListener('input', function (e) {
     var p = cur(), t = e.target; if (!p) return;
+    if (state.preview && t.id !== 'amt') promotePreview();
     if (t.id === 'f_name') { p.name = t.value; markEdited(p, 'name'); saveProducts(); return; }
     if (t.id === 'f_alias') { p.alias = t.value; saveProducts(); return; }
     if (t.id === 'amt') { state.amount = MC.num(t.value); renderResults(); return; }
@@ -493,6 +537,10 @@
   $('#item').addEventListener('click', function (e) {
     var p = cur(), t = e.target;
     var chip = t.closest && t.closest('.chip');
+    if (t.id === 'savePrev') { promotePreview(); return; }
+    if (t.id === 'closePrev') { state.preview = null; renderItem(); renderResults(); return; }
+    if (state.preview && ((chip && (chip.id === 'addSrv' || chip.dataset.delsrv != null)) ||
+        (t.closest && t.closest('#unitSeg button')) || t.id === 'usePrice')) promotePreview();
     if (chip && p && chip.dataset.delsrv != null) {
       var di = +chip.dataset.delsrv, dsv = p.servings[di];
       if (dsv && confirm('Remove serving “' + dsv.name + '”?')) { p.servings.splice(di, 1); saveProducts(); renderChips(); }
@@ -676,7 +724,7 @@
   async function lookup(raw) {
     var code = String(raw || '').replace(/\D/g, '');
     if (!code) { toast('Enter a barcode'); return; }
-    var ex = Object.values(state.products).find(function (p) { return p.barcode && stripZ(p.barcode) === stripZ(code); });
+    var ex = findByBarcode(code);
     if (ex) { openProduct(ex.id); toast('Already in your library'); return; }
     toast('Looking up ' + code + '…');
     var prod;
@@ -691,8 +739,15 @@
         toast('Found. Check the pack weight and add the price.');
       }
     } catch (err) {
-      prod = newProduct({ barcode: code });
-      toast('Lookup failed (' + (err.message || err) + '). Enter the macros manually.');
+      var hit = null;
+      try { var cat = await loadCatalog(); hit = cat.items.find(function (i) { return stripZ(i.barcode) === stripZ(code); }); } catch (e2) { /* no catalogue */ }
+      if (hit) {
+        prod = newProduct(catalogToProduct(hit));
+        toast('Open Food Facts unreachable: used the catalogue copy');
+      } else {
+        prod = newProduct({ barcode: code });
+        toast('Lookup failed (' + (err.message || err) + '). Enter the macros manually.');
+      }
     }
     state.products[prod.id] = prod; saveProducts(); openProduct(prod.id);
   }
@@ -885,6 +940,108 @@
   }
   $('#rescanBtn').addEventListener('click', rescanLibrary);
 
+  // ---------- catalogue ----------
+  var catalog = null, catLoading = null, catLimit = 60;
+  var CAT_EXCLUDE = { costP: 1, costF: 1, costC: 1, kcalPerEuro: 1, pricePerKg: 1 };
+  var CAT_QUICK = [['Pure protein', 'pPer100kcal'], ['Pure fat', 'fPer100kcal'], ['Pure carbs', 'cPer100kcal'],
+    ['Lowest kcal', 'kcal100'], ['Most fibre', 'fiberPer100kcal'], ['A–Z', 'name']];
+  function loadCatalog() {
+    if (catalog) return Promise.resolve(catalog);
+    if (catLoading) return catLoading;
+    catLoading = fetch('catalog/catalog.json').then(function (r) {
+      if (!r.ok) throw new Error(r.status === 404 ? 'not built yet' : 'HTTP ' + r.status);
+      return r.json();
+    }).then(function (j) {
+      catalog = { meta: j, items: MC.catalogItems(j) }; return catalog;
+    }).catch(function (e) { catLoading = null; throw e; });
+    return catLoading;
+  }
+  function catalogToProduct(it) {
+    return { barcode: it.barcode, source: 'off', name: it.name, brand: it.brand, kcal: it.kcal, p: it.p, f: it.f, c: it.c,
+      fiber: it.fiber, pack: it.pack, unit: it.unit, shops: it.shops };
+  }
+  function openPreview(it, amount) {
+    var ex = findByBarcode(it.barcode);
+    if (ex) { openProduct(ex.id, amount); return; }
+    var p = newProduct(catalogToProduct(it));
+    state.preview = p; state.currentId = null;
+    state.amount = amount > 0 ? amount : (MC.edibleWeight(p) || 100); state.lastSrv = null;
+    showTab('scan'); renderItem(); renderResults();
+  }
+  function catShops() { return state.ui.catShops == null ? 'AJP' : state.ui.catShops; }
+  function shopChips(boxId) {
+    var on = catShops();
+    $('#' + boxId).innerHTML = ['A', 'J', 'P'].map(function (s) {
+      return '<button class="chip ' + (on.indexOf(s) >= 0 ? 'on' : '') + '" data-shop="' + s + '">' + MC.SHOP_NAMES[s] + '</button>';
+    }).join('');
+  }
+  function toggleShop(s) {
+    var on = catShops();
+    on = on.indexOf(s) >= 0 ? on.replace(s, '') : ['A', 'J', 'P'].filter(function (x) { return on.indexOf(x) >= 0 || x === s; }).join('');
+    state.ui.catShops = on; saveUi();
+  }
+  function shopBadges(shops) {
+    return (shops || '').split('').map(function (s) { return '<span class="shop ' + s + '">' + MC.SHOP_NAMES[s] + '</span>'; }).join('');
+  }
+  function initCat() {
+    $('#catSort').innerHTML = MC.METRICS.filter(function (m) { return !CAT_EXCLUDE[m.key]; })
+      .map(function (m) { return '<option value="' + m.key + '">' + esc(m.label) + '</option>'; }).join('');
+    $('#catSort').addEventListener('change', function (e) { state.ui.catSort = e.target.value; state.ui.catDir = 'best'; saveUi(); catLimit = 60; renderCat(); });
+    $('#catDir').addEventListener('click', function () { state.ui.catDir = state.ui.catDir === 'worst' ? 'best' : 'worst'; saveUi(); renderCat(); });
+    $('#catSearch').addEventListener('input', function () { catLimit = 60; renderCat(); });
+    $('#catShops').addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-shop]'); if (!b) return; toggleShop(b.dataset.shop); catLimit = 60; renderCat();
+    });
+    $('#catQuick').addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-key]'); if (!b) return;
+      state.ui.catSort = b.dataset.key; state.ui.catDir = 'best'; saveUi(); catLimit = 60; renderCat();
+    });
+    $('#catList').addEventListener('click', function (e) {
+      if (e.target.id === 'catMore') { catLimit += 60; renderCat(); return; }
+      var r = e.target.closest && e.target.closest('.lib-row'); if (!r || !catalog) return;
+      var it = catalog.items.find(function (i) { return i.id === r.dataset.id; }); if (it) openPreview(it);
+    });
+  }
+  function renderCat() {
+    var sortKey = state.ui.catSort || 'pPer100kcal', dir = state.ui.catDir || 'best', def = MC.metricDef(sortKey);
+    shopChips('catShops');
+    $('#catQuick').innerHTML = CAT_QUICK.map(function (q) {
+      return '<button class="chip ' + (sortKey === q[1] ? 'on' : '') + '" data-key="' + q[1] + '">' + q[0] + '</button>';
+    }).join('');
+    $('#catSort').value = sortKey;
+    $('#catDir').textContent = def.text ? (dir === 'best' ? 'A → Z' : 'Z → A') : (dir === 'best' ? 'Best first' : 'Worst first');
+    if (!catalog) {
+      $('#catList').innerHTML = '<p class="muted">Loading catalogue…</p>';
+      loadCatalog().then(renderCat).catch(function (e) {
+        $('#catList').innerHTML = '<p class="muted">Catalogue not available (' + esc(e.message || e) + '). It is rebuilt on GitHub every Monday; check your connection, or try again later.</p>';
+      });
+      return;
+    }
+    var meta = catalog.meta, gen = meta.generated ? MC.dmy(new Date(meta.generated)) : '?';
+    $('#catInfo').innerHTML = (meta.total || catalog.items.length) + ' products · AH ' + (meta.counts ? meta.counts.A : '?') +
+      ' · Jumbo ' + (meta.counts ? meta.counts.J : '?') + ' · Picnic ' + (meta.counts ? meta.counts.P : '?') + ' · updated ' + esc(gen) +
+      '<br>Data: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> contributors (ODbL). Crowd-sourced: check the label.';
+    var list = MC.filterCatalog(catalog.items, catShops(), $('#catSearch').value);
+    var rows = MC.sortProducts(list, sortKey, dir), shown = rows.slice(0, catLimit);
+    var vals = shown.filter(function (r) { return r.value != null; }).map(function (r) { return r.value; });
+    var mx = Math.max.apply(null, vals.concat([0])), mn = Math.min.apply(null, vals.concat([Infinity]));
+    var h = '<p class="muted" style="margin:0 0 4px">' + rows.length + ' match' + (rows.length === 1 ? '' : 'es') + ' · ' + esc(def.label) +
+      (def.better === 'low' ? ' (lower is better)' : '') + '. Tap to open; edit or Save to add it to your library.</p>';
+    shown.forEach(function (r, i) {
+      var it = r.prod, v = r.value, m = MC.metrics(it), u = MC.unit(it);
+      var width = v == null ? 0 : (def.better === 'high' ? (mx > 0 ? v / mx : 0) : (v > 0 ? mn / v : 1));
+      var mine = findByBarcode(it.barcode);
+      h += '<div class="lib-row" data-id="' + esc(it.id) + '"><div class="rank">' + (i + 1) + '</div>' +
+        '<div><div class="nm">' + esc(it.name) + (mine ? ' <span class="inlib">✓ mine</span>' : '') + '</div>' +
+        '<div class="sub">' + shopBadges(it.shops) + esc(it.brand) + (it.pack ? ' · ' + fmt(it.pack, 0) + ' ' + u : '') +
+        ' · ' + fmt(m.kcal, 0) + ' kcal · P ' + fmt(m.p100) + ' · F ' + fmt(m.f100) + ' · C ' + fmt(m.c100) + ' /100 ' + u + '</div></div>' +
+        '<div class="val">' + (def.text || v == null ? '' : fmt(v, def.dec) + '<small> ' + def.unit + '</small>') + '</div>' +
+        (v != null ? '<div class="bar" style="width:' + Math.max(3, Math.round(width * 100)) + '%"></div>' : '') + '</div>';
+    });
+    if (rows.length > shown.length) h += '<div class="row-actions" style="margin-top:8px"><button class="small" id="catMore">Show more (' + (rows.length - shown.length) + ' left)</button></div>';
+    $('#catList').innerHTML = h;
+  }
+
   // ---------- tools: fill my gap ----------
   state.gap = state.gap || { p: null, f: null, c: null };
   function sortedByName() {
@@ -893,24 +1050,38 @@
   function renderTools() { loadGapInputs(); renderGap(); renderCompareSelects(); renderCompare(); }
   function loadGapInputs() {
     ['p', 'f', 'c'].forEach(function (k) { var el = $('#g_' + k); if (document.activeElement !== el) el.value = state.gap[k] == null ? '' : state.gap[k]; });
-    var foc = state.ui.gapFocus || 'p';
+    var foc = state.ui.gapFocus || 'p', src = state.ui.gapSrc || 'lib';
     document.querySelectorAll('#gapFocus button').forEach(function (b) { b.classList.toggle('on', b.dataset.f === foc); });
+    document.querySelectorAll('#gapSrc button').forEach(function (b) { b.classList.toggle('on', b.dataset.s === src); });
+    $('#gapShops').hidden = src === 'lib';
+    if (src !== 'lib') shopChips('gapShops');
   }
   function renderGap() {
     var box = $('#gapList'), g = state.gap, foc = state.ui.gapFocus || 'p';
     if (g.p == null || g.f == null || g.c == null) { box.innerHTML = '<p class="muted">Enter protein, fat and carbs (0 is fine), or tap “Use Left today”.</p>'; return; }
     var B = MC.budgetFrom(g);
     if (!(B[foc] > 0)) { box.innerHTML = '<p class="muted">Nothing left to fill for ' + (foc === 'kcal' ? 'calories' : LIMIT_LABEL[foc]) + '.</p>'; return; }
-    var rows = MC.fillGap(Object.values(state.products), g, foc).slice(0, 12);
-    if (!rows.length) { box.innerHTML = '<p class="muted">No item in your library fits this gap.</p>'; return; }
+    var src = state.ui.gapSrc || 'lib', pool = [];
+    if (src !== 'cat') pool = pool.concat(Object.values(state.products));
+    if (src !== 'lib') {
+      if (!catalog) {
+        box.innerHTML = '<p class="muted">Loading catalogue…</p>';
+        loadCatalog().then(renderGap).catch(function (e) { box.innerHTML = '<p class="muted">Catalogue not available (' + esc(e.message || e) + ').</p>'; });
+        return;
+      }
+      pool = pool.concat(MC.filterCatalog(catalog.items, catShops()).filter(function (it) { return !findByBarcode(it.barcode); }));
+    }
+    var rows = MC.fillGap(pool, g, foc).slice(0, src === 'lib' ? 12 : 20);
+    if (!rows.length) { box.innerHTML = '<p class="muted">Nothing ' + (src === 'lib' ? 'in your library ' : '') + 'fits this gap.</p>'; return; }
     var what = foc === 'kcal' ? 'of the ' + fmt(B.kcal, 0) + ' kcal' : 'of the ' + fmt(B[foc], 0) + ' g ' + LIMIT_LABEL[foc];
     box.innerHTML = '<p class="muted" style="margin:0 0 4px">Max amount per item, and how much ' + what + ' it fills. Tap to open.</p>' +
       rows.map(function (r) {
         var p = r.prod, u = MC.unit(p), w = MC.edibleWeight(p);
         var packs = p.pack > 0 ? ' · ' + fmt(r.amount / p.pack, 1) + ' pack' : '';
         var cost = p.price > 0 && w > 0 ? ' · ' + eur(p.price * r.amount / w) : '';
+        var isCat = p.source === 'catalog';
         return '<div class="gap-row" data-id="' + esc(p.id) + '" data-amt="' + r.amount + '">' +
-          '<div class="top"><span>' + esc(MC.displayName(p) || '(no name)') + '</span><span class="pct">' + fmt(r.score * 100, 0) + '%</span></div>' +
+          '<div class="top"><span>' + (isCat ? shopBadges(p.shops) : '') + esc(MC.displayName(p) || '(no name)') + '</span><span class="pct">' + fmt(r.score * 100, 0) + '%</span></div>' +
           '<div class="sub">Eat up to <b>' + fmt(Math.floor(r.amount), 0) + ' ' + u + '</b>' + packs + cost +
           ' → ' + fmt(r.got.kcal, 0) + ' kcal · P ' + fmt(r.got.p) + ' · F ' + fmt(r.got.f) + ' · C ' + fmt(r.got.c) +
           ' · limit: ' + LIMIT_LABEL[r.limit] + '</div>' +
@@ -930,7 +1101,18 @@
     state.ui.gapFocus = b.dataset.f; saveUi(); loadGapInputs(); renderGap();
   });
   $('#gapList').addEventListener('click', function (e) {
-    var r = e.target.closest && e.target.closest('.gap-row'); if (r) openProduct(r.dataset.id, Math.floor(parseFloat(r.dataset.amt)));
+    var r = e.target.closest && e.target.closest('.gap-row'); if (!r) return;
+    var amt = Math.floor(parseFloat(r.dataset.amt));
+    if (r.dataset.id.indexOf('cat:') === 0) {
+      var it = catalog && catalog.items.find(function (i) { return i.id === r.dataset.id; }); if (it) openPreview(it, amt);
+    } else openProduct(r.dataset.id, amt);
+  });
+  $('#gapSrc').addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('button'); if (!b) return;
+    state.ui.gapSrc = b.dataset.s; saveUi(); loadGapInputs(); renderGap();
+  });
+  $('#gapShops').addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-shop]'); if (!b) return; toggleShop(b.dataset.shop); shopChips('gapShops'); renderGap();
   });
 
   // ---------- tools: compare ----------
@@ -1154,7 +1336,7 @@
   });
 
   // ---------- init ----------
-  initLib(); loadTargets(); loadRemaining(); loadSync(); renderItem(); renderResults();
+  initLib(); initCat(); loadTargets(); loadRemaining(); loadSync(); renderItem(); renderResults();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').catch(function () {});
   }

@@ -21,6 +21,8 @@ const dom = new JSDOM(html, {
     w.scrollTo = () => {};
     w.fetch = async (url, opts) => {
       if (String(url).startsWith('https://api.github.com/')) return global.ghMock(String(url), opts || {});
+      if (String(url).endsWith('catalog/catalog.json')) return { ok: true, status: 200, json: async () => global.CATALOG };
+      if (global.OFF_DOWN && String(url).includes('world.openfoodfacts.org')) throw new Error('offline');
       if (String(url).includes('prices.openfoodfacts.org')) {
         if (String(url).includes('4006381333931')) return { ok: true, json: async () => ({ items: [
           { price: 2.5, currency: 'EUR', price_per: 'KILOGRAM', date: '2026-10-01', location: { osm_name: 'X', osm_address_country: 'Nederland' } },
@@ -306,6 +308,68 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('conflict retried and synced', $('#syncStatus').textContent.includes('Synced'), $('#syncStatus').textContent);
   $('#syncForget').click();
   check('forget token', JSON.parse(w.localStorage.getItem('mc.sync')).token === '');
+
+  // ---- catalogue ----
+  global.CATALOG = { generated: '2026-10-26T03:30:00Z', total: 4, counts: { A: 2, J: 1, P: 2 },
+    columns: ['code', 'name', 'brand', 'shops', 'pack', 'unit', 'kcal', 'p', 'f', 'c', 'fiber', 'sugar'],
+    rows: [['50000001', 'Skyr naturel', 'AH', 'A', 450, 'g', 63, 11, 0.2, 4, 0, 4],
+           ['50000002', 'Kipfilet', 'Jumbo', 'J', 300, 'g', 110, 24, 1.5, 0, 0, 0],
+           ['50000003', 'Olijfolie', 'Picnic', 'AP', 500, 'ml', 900, 0, 100, 0, null, 0],
+           ['4006381333931', 'Tuna in catalogue', 'Acme', 'P', 112, 'g', 100, 24, 1, 0, 0, 0]] };
+  $('nav button[data-tab="cat"]').click(); await sleep(30);
+  check('catalogue tab visible', !$('#tab-cat').hidden);
+  check('catalogue info + attribution', $('#catInfo').textContent.includes('4 products') && $('#catInfo').textContent.includes('Open Food Facts') && $('#catInfo').textContent.includes('26/10/2026'), $('#catInfo').textContent);
+  let catRows = [...d.querySelectorAll('#catList .lib-row')];
+  check('catalogue lists all', catRows.length === 4, catRows.length);
+  check('catalogue sorted pure protein first', catRows[0].textContent.includes('Kipfilet') || catRows[0].textContent.includes('Tuna in catalogue'), catRows[0].textContent);
+  check('already-owned marked', catRows.some(r => r.textContent.includes('Tuna in catalogue') && r.textContent.includes('mine')));
+  check('cost sorts hidden in catalogue', ![...$('#catSort').options].some(o => o.value === 'costP'));
+  d.querySelector('#catShops [data-shop="A"]').click(); d.querySelector('#catShops [data-shop="P"]').click();
+  catRows = [...d.querySelectorAll('#catList .lib-row')];
+  check('shop filter (Jumbo only)', catRows.length === 1 && catRows[0].textContent.includes('Kipfilet'), catRows.map(r => r.textContent).join('|'));
+  d.querySelector('#catShops [data-shop="A"]').click(); d.querySelector('#catShops [data-shop="P"]').click();
+  type('#catSearch', 'skyr');
+  check('catalogue search', d.querySelectorAll('#catList .lib-row').length === 1);
+  const libCount = Object.keys(JSON.parse(w.localStorage.getItem('mc.products'))).length;
+  d.querySelector('#catList .lib-row').click();
+  check('preview opens on scan tab', !$('#tab-scan').hidden && $('.prev') && $('#f_name').value === 'Skyr naturel');
+  check('preview not saved yet', Object.keys(JSON.parse(w.localStorage.getItem('mc.products'))).length === libCount);
+  check('preview shows results', $('#results').textContent.includes('This amount: 450 g'), $('#results').textContent.slice(0, 80));
+  type('#amt', '200');
+  check('changing amount does not save', Object.keys(JSON.parse(w.localStorage.getItem('mc.products'))).length === libCount);
+  type('[data-k="price"]', '2,19');
+  const libAfter = JSON.parse(w.localStorage.getItem('mc.products'));
+  check('editing saves preview to library', Object.keys(libAfter).length === libCount + 1 && Object.values(libAfter).some(p => p.name === 'Skyr naturel' && p.price === 2.19));
+  check('banner gone after save', !$('.prev') && !!$('#delItem'));
+  // close without saving
+  $('nav button[data-tab="cat"]').click(); type('#catSearch', 'kip'); d.querySelector('#catList .lib-row').click();
+  $('#closePrev').click();
+  check('close preview discards', Object.keys(JSON.parse(w.localStorage.getItem('mc.products'))).length === libCount + 1 && $('#item').textContent.includes('Scan a barcode'));
+  // opening an owned product from the catalogue opens the library item
+  $('nav button[data-tab="cat"]').click(); type('#catSearch', 'tuna in'); d.querySelector('#catList .lib-row').click();
+  check('owned product opens library copy', !$('.prev') && $('#f_alias').value === 'Tuna');
+  type('#catSearch', '');
+  // fill my gap over the catalogue
+  $('nav button[data-tab="tools"]').click();
+  type('#g_p', '50'); type('#g_f', '20'); type('#g_c', '50');
+  d.querySelector('#gapFocus button[data-f="p"]').click();
+  d.querySelector('#gapSrc button[data-s="cat"]').click(); await sleep(20);
+  check('gap shop chips shown for catalogue', !$('#gapShops').hidden && d.querySelectorAll('#gapShops [data-shop]').length === 3);
+  const gapRows = [...d.querySelectorAll('.gap-row')];
+  check('gap catalogue excludes owned items', !gapRows.some(r => r.textContent.includes('Tuna in catalogue')) && !gapRows.some(r => r.textContent.includes('Skyr')), gapRows.map(r => r.textContent).join('|'));
+  check('gap catalogue top = Kipfilet', gapRows[0] && gapRows[0].textContent.includes('Kipfilet') && gapRows[0].textContent.includes('Jumbo'), gapRows[0] && gapRows[0].textContent);
+  gapRows[0].click();
+  check('gap catalogue row opens preview with amount', !!$('.prev') && $('#amt').value === '208', $('#amt').value);
+  $('nav button[data-tab="tools"]').click();
+  d.querySelector('#gapSrc button[data-s="both"]').click();
+  check('gap both includes library', [...d.querySelectorAll('.gap-row')].some(r => r.textContent.includes('Tuna')) && [...d.querySelectorAll('.gap-row')].some(r => r.textContent.includes('Kipfilet')));
+  d.querySelector('#gapSrc button[data-s="lib"]').click();
+  check('gap shop chips hidden for library', $('#gapShops').hidden);
+  // offline barcode fallback
+  global.OFF_DOWN = true;
+  $('#barcodeInput').value = '50000003'; $('#btnLookup').click(); await sleep(40);
+  check('offline lookup uses catalogue', $('#f_name').value === 'Olijfolie' && $('#unitSeg button[data-u="ml"]').classList.contains('on'), $('#f_name').value);
+  global.OFF_DOWN = false;
 
   check('no script errors', errors.length === 0, errors.join('\n'));
   console.log(fails ? fails + ' FAILED' : 'SMOKE ALL PASSED');

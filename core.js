@@ -309,6 +309,37 @@
     return { products: out, updated: updated };
   }
 
+  // ---------- catalogue (Open Food Facts snapshot of AH / Jumbo / Picnic) ----------
+  const SHOP_NAMES = { A: 'AH', J: 'Jumbo', P: 'Picnic' };
+  // catalog.json {columns, rows} -> product-like objects usable by metrics(), fillGap(), sortProducts().
+  function catalogItems(cat) {
+    if (!cat || !Array.isArray(cat.columns) || !Array.isArray(cat.rows)) return [];
+    const ix = {};
+    cat.columns.forEach(function (k, i) { ix[k] = i; });
+    const get = function (r, k) { return ix[k] == null ? null : r[ix[k]]; };
+    return cat.rows.map(function (r) {
+      const code = String(get(r, 'code'));
+      return {
+        id: 'cat:' + code, barcode: code, name: get(r, 'name') || '', brand: get(r, 'brand') || '',
+        shops: get(r, 'shops') || '', pack: get(r, 'pack'), unit: get(r, 'unit') === 'ml' ? 'ml' : 'g',
+        kcal: get(r, 'kcal'), p: get(r, 'p'), f: get(r, 'f'), c: get(r, 'c'), fiber: get(r, 'fiber'), sugar: get(r, 'sugar'),
+        source: 'catalog'
+      };
+    });
+  }
+  // shops: string of letters to keep, e.g. 'AJ'. Empty string keeps nothing.
+  function filterCatalog(items, shops, q) {
+    shops = shops == null ? 'AJP' : shops;
+    return items.filter(function (it) {
+      let ok = false;
+      for (let i = 0; i < it.shops.length; i++) if (shops.indexOf(it.shops[i]) >= 0) { ok = true; break; }
+      return ok && matches(it, q);
+    });
+  }
+  function shopLabel(shops) {
+    return (shops || '').split('').map(function (s) { return SHOP_NAMES[s] || s; }).join(' · ');
+  }
+
   // ---------- CSV ----------
   function csvCell(v) {
     if (v === null || v === undefined) return '';
@@ -342,6 +373,7 @@
     validBarcode: validBarcode, METRICS: METRICS, metricDef: metricDef, sortProducts: sortProducts, toCsv: toCsv,
     fillGap: fillGap, compare: compare, LOOKUP_FIELDS: LOOKUP_FIELDS, isProtected: isProtected, mergeLookup: mergeLookup,
     dmyKey: dmyKey, mergePrices: mergePrices,
+    catalogItems: catalogItems, filterCatalog: filterCatalog, shopLabel: shopLabel, SHOP_NAMES: SHOP_NAMES,
     ensureHistory: ensureHistory, recordPrice: recordPrice, priceStats: priceStats
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
