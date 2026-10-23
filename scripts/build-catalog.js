@@ -15,7 +15,7 @@ const path = require('path');
 const UA = 'MacroCheck/1.0 (personal nutrition web app; github.com/DynamicUnicorn/macro-check)';
 // Official nightly export (tab-separated, gzipped, ~0.9 GB). Open Food Facts asks bulk users to use this, not the API.
 const EXPORT_URL = 'https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz';
-const COLUMNS = ['code', 'name', 'brand', 'shops', 'pack', 'unit', 'kcal', 'p', 'f', 'c', 'fiber', 'sugar'];
+const COLUMNS = ['code', 'name', 'brand', 'shops', 'pack', 'unit', 'kcal', 'p', 'f', 'c', 'fiber', 'sugar', 'alt'];
 const SHOP_NAMES = { A: 'Albert Heijn', J: 'Jumbo', P: 'Picnic' };
 
 // Which of our shops a product is linked to, from the free-text "stores" field and the brand tags.
@@ -73,7 +73,7 @@ function transform(prod, shopLetter) {
   if (pack != null && (pack <= 0 || pack > 20000)) pack = null;
   const fiber = num(n.fiber_100g), sugar = num(n.sugars_100g);
   return [String(prod.code), name.slice(0, 120), brand.slice(0, 60), shopLetter, r1(pack), unit,
-    Math.round(kcal), r1(p), r1(f), r1(c), fiber == null || fiber < 0 ? null : r1(fiber), sugar == null || sugar < 0 ? null : r1(sugar)];
+    Math.round(kcal), r1(p), r1(f), r1(c), fiber == null || fiber < 0 ? null : r1(fiber), sugar == null || sugar < 0 ? null : r1(sugar), ''];
 }
 
 // Merge rows by barcode: shops are combined; the first complete row wins for the data.
@@ -83,6 +83,55 @@ function addRow(map, row) {
   const shops = new Set((prev[3] + row[3]).split(''));
   prev[3] = ['A', 'J', 'P'].filter((s) => shops.has(s)).join('');
   if (prev[4] == null && row[4] != null) prev[4] = row[4];
+}
+
+// ---- duplicates ----
+// In-store barcodes (GS1 prefix 20-29) encode one pack's weight/price, so fresh meat, fish and cheese get a new
+// barcode for every pack; Open Food Facts then holds dozens of copies. Products are merged when they have the same
+// shop brand, the same name (ignoring case/punctuation) and macros equal within rounding. Other barcodes go to 'alt'.
+const isInStore = (code) => code.length === 13 && code[0] === '2';
+const normName = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+function brandFamily(b) {
+  const n = normName(b).replace(/\s+/g, '');
+  if (/^(ah|albertheijn)/.test(n)) return 'ah';
+  if (/^jumbo/.test(n)) return 'jumbo';
+  if (/^picnic/.test(n)) return 'picnic';
+  return n;
+}
+function sameMacros(a, b) {
+  const kc = Math.abs(a[6] - b[6]) <= Math.max(3, 0.03 * Math.max(a[6], b[6]));
+  return kc && [7, 8, 9].every((i) => Math.abs(a[i] - b[i]) <= 0.5);
+}
+function dedupe(rows) {
+  const groups = new Map();
+  for (const r of rows) {
+    const k = brandFamily(r[2]) + '|' + normName(r[1]);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  const out = [];
+  let merged = 0;
+  for (const list of groups.values()) {
+    // regular barcodes first, then rows with a pack size, so the kept entry is the most useful one
+    list.sort((a, b) => (isInStore(a[0]) - isInStore(b[0])) || ((a[4] == null) - (b[4] == null)) || a[0].localeCompare(b[0]));
+    const clusters = [];
+    for (const r of list) {
+      const c = clusters.find((cl) => sameMacros(cl[0], r));
+      if (c) c.push(r); else clusters.push([r]);
+    }
+    for (const cl of clusters) {
+      const keep = cl[0].slice();
+      if (cl.length > 1) {
+        const shops = new Set(cl.map((r) => r[3]).join('').split(''));
+        keep[3] = ['A', 'J', 'P'].filter((x) => shops.has(x)).join('');
+        if (keep[4] == null) { const withPack = cl.find((r) => r[4] != null); if (withPack) keep[4] = withPack[4]; }
+        keep[12] = cl.slice(1).map((r) => r[0]).join(' ');
+        merged += cl.length - 1;
+      }
+      out.push(keep);
+    }
+  }
+  return { rows: out, merged: merged };
 }
 
 // One tab-separated export line -> API-like product object (only the fields we use), or null.
@@ -124,7 +173,9 @@ async function buildFromLines(lines, opts) {
     if (row) { addRow(map, row); stats.kept++; }
   }
   if (!ix) throw new Error('Export was empty');
-  const rows = Array.from(map.values()).sort((a, b) => a[1].localeCompare(b[1], 'nl'));
+  const dd = dedupe(Array.from(map.values()));
+  stats.merged = dd.merged;
+  const rows = dd.rows.sort((a, b) => a[1].localeCompare(b[1], 'nl'));
   const counts = { A: 0, J: 0, P: 0 };
   rows.forEach((r) => r[3].split('').forEach((x) => counts[x]++));
   return {
@@ -169,8 +220,9 @@ async function main() {
   console.log('Wrote ' + out + ' (' + kb + ' KB)');
   // shows up in the run's annotations (readable via the API)
   console.log('::notice::Catalogue: ' + cat.total + ' products (AH ' + cat.counts.A + ', Jumbo ' + cat.counts.J + ', Picnic ' + cat.counts.P +
-    '), ' + kb + ' KB. Export lines ' + cat.stats.lines + ', NL ' + cat.stats.nl + ', linked to a shop ' + cat.stats.shop + '.');
+    '), ' + kb + ' KB. Export lines ' + cat.stats.lines + ', NL ' + cat.stats.nl + ', linked to a shop ' + cat.stats.shop +
+    ', duplicates merged ' + cat.stats.merged + '.');
 }
 
-module.exports = { transform, addRow, buildFromLines, detectShops, parseQuantity, lineToProduct, COLUMNS };
+module.exports = { transform, addRow, buildFromLines, detectShops, parseQuantity, lineToProduct, dedupe, brandFamily, COLUMNS };
 if (require.main === module) main().catch((e) => { console.error('::error::' + (e && e.message || e)); console.error(e); process.exit(1); });

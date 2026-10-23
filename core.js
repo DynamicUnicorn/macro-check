@@ -323,6 +323,7 @@
         id: 'cat:' + code, barcode: code, name: get(r, 'name') || '', brand: get(r, 'brand') || '',
         shops: get(r, 'shops') || '', pack: get(r, 'pack'), unit: get(r, 'unit') === 'ml' ? 'ml' : 'g',
         kcal: get(r, 'kcal'), p: get(r, 'p'), f: get(r, 'f'), c: get(r, 'c'), fiber: get(r, 'fiber'), sugar: get(r, 'sugar'),
+        alt: get(r, 'alt') ? String(get(r, 'alt')).split(' ').filter(Boolean) : [],   // other barcodes of merged duplicates
         source: 'catalog'
       };
     });
@@ -335,6 +336,10 @@
       for (let i = 0; i < it.shops.length; i++) if (shops.indexOf(it.shops[i]) >= 0) { ok = true; break; }
       return ok && matches(it, q);
     });
+  }
+  // All barcodes of a catalogue item (main + merged duplicates), without leading zeros, for matching scans.
+  function itemCodes(it) {
+    return [it.barcode].concat(it.alt || []).map(function (x) { return String(x).replace(/^0+/, ''); });
   }
   function shopLabel(shops) {
     return (shops || '').split('').map(function (s) { return SHOP_NAMES[s] || s; }).join(' · ');
@@ -373,7 +378,7 @@
     validBarcode: validBarcode, METRICS: METRICS, metricDef: metricDef, sortProducts: sortProducts, toCsv: toCsv,
     fillGap: fillGap, compare: compare, LOOKUP_FIELDS: LOOKUP_FIELDS, isProtected: isProtected, mergeLookup: mergeLookup,
     dmyKey: dmyKey, mergePrices: mergePrices,
-    catalogItems: catalogItems, filterCatalog: filterCatalog, shopLabel: shopLabel, SHOP_NAMES: SHOP_NAMES,
+    catalogItems: catalogItems, filterCatalog: filterCatalog, itemCodes: itemCodes, shopLabel: shopLabel, SHOP_NAMES: SHOP_NAMES,
     ensureHistory: ensureHistory, recordPrice: recordPrice, priceStats: priceStats
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

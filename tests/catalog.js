@@ -1,5 +1,5 @@
 // Run: npm test  (or: node tests/catalog.js) — tests the catalogue builder with a fake Open Food Facts export.
-const { transform, addRow, buildFromLines, detectShops, parseQuantity, COLUMNS } = require('../scripts/build-catalog.js');
+const { transform, addRow, buildFromLines, detectShops, parseQuantity, dedupe, brandFamily, COLUMNS } = require('../scripts/build-catalog.js');
 let fails = 0;
 function eq(name, got, want) {
   const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -8,7 +8,7 @@ function eq(name, got, want) {
 const N = (p, f, c, extra) => Object.assign({ proteins_100g: p, fat_100g: f, carbohydrates_100g: c }, extra || {});
 const quark = { code: '8719587412480', product_name: 'Lactosevrije magere kwark', brands: 'AH, Albert Heijn', product_quantity: '500',
   product_quantity_unit: 'g', nutriments: N(10, 0.2, 3.8, { 'energy-kcal_100g': 57, fiber_100g: 0, sugars_100g: 3.8 }) };
-eq('transform basic', transform(quark, 'A'), ['8719587412480', 'Lactosevrije magere kwark', 'AH', 'A', 500, 'g', 57, 10, 0.2, 3.8, 0, 3.8]);
+eq('transform basic', transform(quark, 'A'), ['8719587412480', 'Lactosevrije magere kwark', 'AH', 'A', 500, 'g', 57, 10, 0.2, 3.8, 0, 3.8, '']);
 eq('columns length matches', transform(quark, 'A').length, COLUMNS.length);
 eq('prefers Dutch name', transform(Object.assign({}, quark, { product_name_nl: 'Kwark NL' }), 'A')[1], 'Kwark NL');
 eq('kcal from kJ', transform({ code: '12345678', product_name: 'x', nutriments: N(10, 4, 5, { energy_100g: 418.4 }) }, 'J')[6], 100);
@@ -48,6 +48,30 @@ eq('qty multipack', parseQuantity('6 x 0,33 l'), { pack: 1980, unit: 'ml' });
 eq('qty none', parseQuantity('1 stuk'), { pack: null, unit: null });
 eq('pack from text in transform', transform({ code: '12345678', product_name: 'x', quantity: '250 g', nutriments: N(1, 1, 1) }, 'A')[4], 250);
 
+// ---- duplicates ----
+const R = (code, name, brand, shops, pack, kcal, p, f, c) => [code, name, brand, shops, pack, 'g', kcal, p, f, c, null, null, ''];
+eq('brand family', [brandFamily('Albert Heijn'), brandFamily('AH Excellent'), brandFamily('JUMBO'), brandFamily('Unox')], ['ah', 'ah', 'jumbo', 'unox']);
+const dd = dedupe([
+  R('2369283505649', 'Geelvin tonijnsteak', 'JUMBO', 'J', null, 88, 21.3, 0.3, 0.2),
+  R('2369283205389', 'Geelvin tonijnsteak', 'JUMBO', 'J', null, 88, 21.3, 0.3, 0.2),
+  R('2369283405536', 'Geelvin Tonijnsteak', 'Jumbo', 'J', 250, 88, 21.3, 0.3, 0.1),
+  R('8718452581313', 'Geelvin tonijnsteak', 'Jumbo', 'J', null, 88, 21.3, 0.3, 0.2),
+  R('2369283305560', 'Geelvin tonijnsteak ontdooid', 'Jumbo', 'J', null, 88, 21.3, 0.3, 0.2),
+  R('8718907855884', '100% pindakaas', 'AH', 'A', 350, 597, 27, 50, 10),
+  R('0028007755860', '100% pindakaas', 'AH', 'A', 1000, 630, 27, 52, 10),
+  R('8718265830394', 'Tonijn steaks', 'Albert Heijn', 'A', 250, 101, 23, 1, 0),
+  R('8718452581399', 'Tonijn steaks', 'Jumbo', 'J', null, 101, 23, 1, 0)
+]);
+const tuna = dd.rows.find((r) => r[1].toLowerCase() === 'geelvin tonijnsteak');
+eq('tuna copies merged into one', dd.rows.filter((r) => r[1].toLowerCase() === 'geelvin tonijnsteak').length, 1);
+eq('regular barcode kept over in-store', tuna[0], '8718452581313');
+eq('other barcodes kept as alt', tuna[12].split(' ').sort(), ['2369283205389', '2369283405536', '2369283505649']);
+eq('pack size taken from a merged copy', tuna[4], 250);
+eq('different name not merged (ontdooid)', dd.rows.some((r) => /ontdooid/.test(r[1])), true);
+eq('real variants with different macros kept', dd.rows.filter((r) => r[1] === '100% pindakaas').length, 2);
+eq('same name, different shop brand not merged', dd.rows.filter((r) => r[1] === 'Tonijn steaks').length, 2);
+eq('merged count', dd.merged, 3);
+
 // ---- full build from a fake export ----
 const H = ['code', 'product_name', 'brands', 'brands_tags', 'stores', 'countries_tags', 'quantity',
   'energy-kcal_100g', 'energy_100g', 'proteins_100g', 'fat_100g', 'carbohydrates_100g', 'fiber_100g', 'sugars_100g'];
@@ -70,7 +94,7 @@ async function* gen(arr) { for (const l of arr) yield l; }
   eq('first entry data kept', cat.rows.find((r) => r[0] === '10000000')[1], 'Magere kwark');
   eq('kcal computed when missing', cat.rows.find((r) => r[0] === '10000001')[6], Math.round(4 * 12 + 9 * 1.5 + 4 * 70));
   eq('liquid from quantity text', cat.rows.find((r) => r[0] === '10000005').slice(4, 6), [1000, 'ml']);
-  eq('stats', cat.stats, { lines: 7, nl: 6, shop: 5, kept: 4 }); // NL: all but the Belgian one; shop: all NL but Lidl; kept: minus 'No macros'
+  eq('stats', cat.stats, { lines: 7, nl: 6, shop: 5, kept: 4, merged: 0 }); // NL: all but the Belgian one; shop: all NL but Lidl; kept: minus 'No macros'
   eq('attribution present', /Open Food Facts/.test(cat.source) && /ODbL/.test(cat.license), true);
   let err = '';
   try { await buildFromLines(gen(['code\tproduct_name']), { log: () => {} }); } catch (e) { err = e.message; }

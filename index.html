@@ -269,7 +269,7 @@
     </div>
     <div class="card muted">
       Product data comes from <b>Open Food Facts</b> (crowd-sourced, so check the numbers against the label).
-      Only the barcode you scan is sent to them (and to Open Prices for price suggestions). Macro Check v8
+      Only the barcode you scan is sent to them (and to Open Prices for price suggestions). Macro Check v9
     </div>
   </section>
 </main>
@@ -741,9 +741,9 @@
       }
     } catch (err) {
       var hit = null;
-      try { var cat = await loadCatalog(); hit = cat.items.find(function (i) { return stripZ(i.barcode) === stripZ(code); }); } catch (e2) { /* no catalogue */ }
+      try { var cat = await loadCatalog(); hit = cat.items.find(function (i) { return MC.itemCodes(i).indexOf(stripZ(code)) >= 0; }); } catch (e2) { /* no catalogue */ }
       if (hit) {
-        prod = newProduct(catalogToProduct(hit));
+        prod = newProduct(catalogToProduct(hit)); prod.barcode = code;   // keep the barcode actually scanned
         toast('Open Food Facts unreachable: used the catalogue copy');
       } else {
         prod = newProduct({ barcode: code });
@@ -961,8 +961,13 @@
     return { barcode: it.barcode, source: 'off', name: it.name, brand: it.brand, kcal: it.kcal, p: it.p, f: it.f, c: it.c,
       fiber: it.fiber, pack: it.pack, unit: it.unit, shops: it.shops };
   }
+  function ownedCopy(it) {
+    var codes = MC.itemCodes(it);
+    for (var i = 0; i < codes.length; i++) { var ex = findByBarcode(codes[i]); if (ex) return ex; }
+    return null;
+  }
   function openPreview(it, amount) {
-    var ex = findByBarcode(it.barcode);
+    var ex = ownedCopy(it);
     if (ex) { openProduct(ex.id, amount); return; }
     var p = newProduct(catalogToProduct(it));
     state.preview = p; state.currentId = null;
@@ -1031,7 +1036,7 @@
     shown.forEach(function (r, i) {
       var it = r.prod, v = r.value, m = MC.metrics(it), u = MC.unit(it);
       var width = v == null ? 0 : (def.better === 'high' ? (mx > 0 ? v / mx : 0) : (v > 0 ? mn / v : 1));
-      var mine = findByBarcode(it.barcode);
+      var mine = ownedCopy(it);
       h += '<div class="lib-row" data-id="' + esc(it.id) + '"><div class="rank">' + (i + 1) + '</div>' +
         '<div><div class="nm">' + esc(it.name) + (mine ? ' <span class="inlib">✓ mine</span>' : '') + '</div>' +
         '<div class="sub">' + shopBadges(it.shops) + esc(it.brand) + (it.pack ? ' · ' + fmt(it.pack, 0) + ' ' + u : '') +
@@ -1070,7 +1075,7 @@
         loadCatalog().then(renderGap).catch(function (e) { box.innerHTML = '<p class="muted">Catalogue not available (' + esc(e.message || e) + ').</p>'; });
         return;
       }
-      pool = pool.concat(MC.filterCatalog(catalog.items, catShops()).filter(function (it) { return !findByBarcode(it.barcode); }));
+      pool = pool.concat(MC.filterCatalog(catalog.items, catShops()).filter(function (it) { return !ownedCopy(it); }));
     }
     var rows = MC.fillGap(pool, g, foc).slice(0, src === 'lib' ? 12 : 20);
     if (!rows.length) { box.innerHTML = '<p class="muted">Nothing ' + (src === 'lib' ? 'in your library ' : '') + 'fits this gap.</p>'; return; }

@@ -170,7 +170,7 @@ The site is served by **GitHub Pages** from the `main` branch, root folder, of `
 
 When changing any app file:
 1. Run the tests: `npm test` (see below).
-2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v8` → `macro-check-v9`). Without this, phones keep showing the cached old version.
+2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v9` → `macro-check-v10`). Without this, phones keep showing the cached old version.
 3. Commit and push to `main`.
 4. On the phone, close and reopen the app once to load the new version.
 
@@ -214,6 +214,7 @@ With Claude: open the same chat on any device, or start a new one and ask Claude
 - **When:** every Monday at 03:23 UTC, or on demand (GitHub → Actions → *catalogue* → *Run workflow*).
 - **What:** Open Food Facts' official **nightly export** (about 0.9 GB compressed), streamed and filtered on GitHub's machine. Open Food Facts asks bulk users to use this rather than page through the API, which gets blocked. It keeps products sold in the Netherlands whose **stores** field mentions Albert Heijn/AH, Jumbo or Picnic, or whose **brand** is AH (including AH Excellent, AH Terra and other sub-brands), Jumbo or Picnic. A product linked to several shops gets all of them.
 - **Kept:** products with protein, fat and carbs per 100 g/ml. kcal comes from the label, else kJ ÷ 4.184, else 4/4/9. Products with impossible values (P+F+C over 105 g, kcal over 950, negative values), **kcal that contradict the macros** (off by more than 10 kcal and more than 15 %), or no name are dropped. That last rule removes about 1.5 % of entries, mostly typos that would otherwise top the "purest source" rankings with impossible numbers.
+- **Duplicates merged:** fresh meat, fish and cheese from the counter carry *in-store barcodes* (starting with 2) that encode one pack's weight or price, so every pack someone scans becomes a new Open Food Facts entry (one AH salmon fillet had 38 copies). Products with the same shop brand, the same name (ignoring capitals and punctuation) and macros equal within rounding (±0.5 g, ±3 % kcal) are merged into one entry. A regular barcode is preferred over an in-store one, and the other barcodes are kept so scans and "✓ mine" still match. Same-name products with genuinely different macros (e.g. two "100% pindakaas" recipes) stay separate.
 - **Stored per product:** barcode, name, brand, shops, pack size (parsed from text like "500 g", "1,5 l" or "6 x 0,33 l"), g/ml, kcal, protein, fat, carbs, fibre, sugar.
 - **Safety:** the job refuses to replace the catalogue with one less than 60 % of the previous size (a bad export shouldn't wipe it), and stops with a clear error if the export's columns change.
 - The app downloads the file the first time you open the Catalogue (or a catalogue search in Fill my gap) and then keeps it for offline use. If Open Food Facts is unreachable when you scan, the barcode is looked up in the catalogue instead.
@@ -269,6 +270,7 @@ The app can keep a copy of your **product library** in a **private** repo, `Dyna
 
 All dates dd/mm/yyyy.
 
+- **23/10/2026 – v9**: catalogue duplicates merged (about 1,600 copies, mostly in-store barcodes); merged barcodes still recognised when scanning.
 - **23/10/2026 – v8**: readable link colour in dark mode.
 - **23/10/2026 – v7**: Catalogue of AH / Jumbo / Picnic products from Open Food Facts, rebuilt weekly on GitHub; preview and save to library; Fill my gap can search the catalogue; offline barcode fallback.
 - **23/10/2026 – v6**: *Sync with GitHub*: product library to a private repo, prices merged back in. Targets and token never leave the phone.

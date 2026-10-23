@@ -214,6 +214,10 @@ eq('filter no shops', MC.filterCatalog(ci, '').length, 0);
 eq('shop label', MC.shopLabel('AP'), 'AH · Picnic');
 eq('catalog in fill gap', MC.fillGap(ci, { p: 40, f: 10, c: 30 }, 'p')[0].prod.name, 'Magere kwark');
 eq('bad catalog -> empty', MC.catalogItems({}).length, 0);
+const ciAlt = MC.catalogItems({ columns: catJson.columns.concat(['alt']), rows: [catJson.rows[0].concat(['2369283205389 0023023291036'])] });
+eq('alt barcodes parsed', JSON.stringify(ciAlt[0].alt), JSON.stringify(['2369283205389', '0023023291036']));
+eq('itemCodes strips leading zeros', JSON.stringify(MC.itemCodes(ciAlt[0])), JSON.stringify(['8719587412480', '2369283205389', '23023291036']));
+eq('old catalogue without alt still works', JSON.stringify(ci[0].alt), '[]');
 
 console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
 process.exit(fails ? 1 : 0);

@@ -315,12 +315,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     rows: [['50000001', 'Skyr naturel', 'AH', 'A', 450, 'g', 63, 11, 0.2, 4, 0, 4],
            ['50000002', 'Kipfilet', 'Jumbo', 'J', 300, 'g', 110, 24, 1.5, 0, 0, 0],
            ['50000003', 'Olijfolie', 'Picnic', 'AP', 500, 'ml', 900, 0, 100, 0, null, 0],
-           ['4006381333931', 'Tuna in catalogue', 'Acme', 'P', 112, 'g', 100, 24, 1, 0, 0, 0]] };
+           ['4006381333931', 'Tuna in catalogue', 'Acme', 'P', 112, 'g', 100, 24, 1, 0, 0, 0],
+           ['50000009', 'Zalmfilet', 'AH', 'A', 250, 'g', 200, 20, 13, 0, 0, 0, '2303219405252 96385074']] };
+  global.CATALOG.columns.push('alt');
   $('nav button[data-tab="cat"]').click(); await sleep(30);
   check('catalogue tab visible', !$('#tab-cat').hidden);
   check('catalogue info + attribution', $('#catInfo').textContent.includes('4 products') && $('#catInfo').textContent.includes('Open Food Facts') && $('#catInfo').textContent.includes('26/10/2026'), $('#catInfo').textContent);
   let catRows = [...d.querySelectorAll('#catList .lib-row')];
-  check('catalogue lists all', catRows.length === 4, catRows.length);
+  check('catalogue lists all', catRows.length === 5, catRows.length);
+  check('owned via alt barcode marked mine', catRows.some(r => r.textContent.includes('Zalmfilet') && r.textContent.includes('mine')), catRows.map(r => r.textContent).join('|'));
   check('catalogue sorted pure protein first', catRows[0].textContent.includes('Kipfilet') || catRows[0].textContent.includes('Tuna in catalogue'), catRows[0].textContent);
   check('already-owned marked', catRows.some(r => r.textContent.includes('Tuna in catalogue') && r.textContent.includes('mine')));
   check('cost sorts hidden in catalogue', ![...$('#catSort').options].some(o => o.value === 'costP'));
