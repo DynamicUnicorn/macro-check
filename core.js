@@ -42,6 +42,19 @@
     return prod.p == null || prod.f == null || prod.c == null;
   }
 
+  // ---------- names ----------
+  // Your own name (alias) wins for display; the product name from the label/database is kept untouched.
+  function displayName(prod) {
+    const a = (prod.alias || '').trim();
+    return a || (prod.name || '').trim();
+  }
+  // Case-insensitive search over alias, product name and brand.
+  function matches(prod, q) {
+    q = (q || '').trim().toLowerCase();
+    if (!q) return true;
+    return [prod.alias, prod.name, prod.brand].join(' ').toLowerCase().indexOf(q) >= 0;
+  }
+
   // ---------- per-product metrics ----------
   // 'g' (solids, per 100 g) or 'ml' (liquids, per 100 ml). Missing = 'g'.
   function unit(prod) { return prod && prod.unit === 'ml' ? 'ml' : 'g'; }
@@ -157,7 +170,7 @@
   function sortProducts(list, key, dir) {
     const def = metricDef(key);
     if (def.text) {
-      const named = list.map(function (prod) { return { prod: prod, value: null, text: (prod.name || '').trim() }; });
+      const named = list.map(function (prod) { return { prod: prod, value: null, text: displayName(prod) }; });
       named.sort(function (a, b) {
         if (!a.text !== !b.text) return a.text ? -1 : 1;   // unnamed items last
         const c = a.text.localeCompare(b.text, 'nl', { sensitivity: 'base', numeric: true });
@@ -267,11 +280,11 @@
   }
 
   function toCsv(products) {
-    const head = ['name', 'brand', 'barcode', 'kcal_per_100g', 'protein_per_100g', 'fat_per_100g', 'carbs_per_100g', 'fibre_per_100g',
+    const head = ['alias', 'name', 'brand', 'barcode', 'kcal_per_100g', 'protein_per_100g', 'fat_per_100g', 'carbs_per_100g', 'fibre_per_100g',
       'unit', 'pack', 'drained_g', 'price_eur', 'price_date', 'source', 'added'];
     const lines = [head.join(',')];
     products.forEach(function (p) {
-      lines.push([p.name, p.brand, p.barcode, p.kcal, p.p, p.f, p.c, p.fiber, unit(p), p.pack, p.edible, p.price, p.priceDate, p.source, p.added]
+      lines.push([p.alias, p.name, p.brand, p.barcode, p.kcal, p.p, p.f, p.c, p.fiber, unit(p), p.pack, p.edible, p.price, p.priceDate, p.source, p.added]
         .map(csvCell).join(','));
     });
     return lines.join('\n');
@@ -287,7 +300,7 @@
   }
 
   const api = {
-    num: num, dmy: dmy, macroKcal: macroKcal, kcalUsed: kcalUsed, sanity: sanity, isIncomplete: isIncomplete,
+    num: num, dmy: dmy, displayName: displayName, matches: matches, macroKcal: macroKcal, kcalUsed: kcalUsed, sanity: sanity, isIncomplete: isIncomplete,
     unit: unit, edibleWeight: edibleWeight, metrics: metrics, scale: scale, budgetFrom: budgetFrom, fit: fit,
     validBarcode: validBarcode, METRICS: METRICS, metricDef: metricDef, sortProducts: sortProducts, toCsv: toCsv,
     fillGap: fillGap, compare: compare, LOOKUP_FIELDS: LOOKUP_FIELDS, isProtected: isProtected, mergeLookup: mergeLookup,

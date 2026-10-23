@@ -41,11 +41,13 @@ The app has four tabs: **Scan**, **Library**, **Tools** and **Settings**.
 | Section | What it's for |
 |---|---|
 | **Scan / Manual / barcode box** | Scan with the camera (tap **🔦 Light** for the flashlight, shown when your phone supports it), type a barcode, or add an item by hand. A product you've scanned before opens from your library instantly. |
-| **Item card** | Name, **Solid (g) / Liquid (ml)** switch, label values per 100 g or 100 ml, pack size, drained weight (solids only), price with **price history**, and the amount you plan to eat. Quick buttons: whole pack, ½ pack, drained, glass (250 ml, liquids), 100 g/ml, plus your own **servings**. |
+| **Item card** | **Your name for it** (optional alias), the product name, **Solid (g) / Liquid (ml)** switch, label values per 100 g or 100 ml, pack size, drained weight (solids only), price with **price history**, and the amount you plan to eat. Quick buttons: whole pack, ½ pack, drained, glass (250 ml, liquids), 100 g/ml, plus your own **servings**. |
 | **This amount** | kcal, protein, fat and carbs for the amount entered, plus what that amount costs. |
 | **Quality of the source** | Macros per 100 kcal and each macro's share of the calories. |
 | **Cost** | € per kg or litre (and per kg drained), € per 100 g / 25 g protein, € per 100 g fat and carbs, kcal per €. |
 | **Fit for your day** | One column each for *Left today* (if filled in under Settings), *Training day* and *Rest day*: what's left after eating this amount, % of the budget used, and the maximum amount you could eat plus which macro runs out first. Red = over budget, orange = 90 %+ used. The Training/Rest switch only highlights a column. |
+
+**Your own names (aliases):** give any product a name that makes sense to you, e.g. "Quark" for "AH Lactosevrije magere kwark". The alias is shown everywhere (library, Tools, picker, compare). The original product name stays as it is and shows in small text underneath. Search matches your name, the product name and the brand. Scanning the same barcode again opens the existing item, never a duplicate, and a rescan never touches your alias.
 
 **Servings:** tap **＋ Serving**, give it a name (scoop, egg, slice…) and the grams or ml of one serving. It's saved with that product. Tap the serving to set the amount; tap it again to add another (2 × scoop, 3 × scoop…). ✕ removes it.
 
@@ -55,7 +57,7 @@ The app has four tabs: **Scan**, **Library**, **Tools** and **Settings**.
 
 ### Library tab
 Every scanned or manual item, sortable by:
-- **Name (A–Z / Z–A)**
+- **Name (A–Z / Z–A)**: by your alias when set, otherwise the product name
 - protein / fat / carbs **per 100 kcal** ("purest source")
 - protein / fat / carb **share of calories**
 - protein / fat / carbs / kcal **per 100 g/ml**
@@ -74,7 +76,7 @@ Quick chips: *Pure protein*, *Pure fat*, *Pure carbs*, *Cheapest protein/fat/car
 ### Tools tab
 **Fill my gap:** enter what you still need to eat (or tap *Use "Left today"*), and choose what to fill mostly: calories, protein, fat or carbs. Every library item gets the **largest amount you can eat without going over any macro or the calories**, ranked by how much of your chosen target that amount fills. Each row shows the amount, number of packs, cost, the macros it delivers and which macro is the limit. Tap a row to open the item with that amount filled in.
 
-**Compare two items:** pick two products and see every library metric side by side. The better value per line is green, and the bottom line counts how many lines each wins. Not every line matters for your goal (a cheaper kcal-per-€ isn't a win if you're cutting), so read the lines you care about.
+**Compare two items:** tap each button to open a compact, searchable list (type part of your name, the product name or the brand), then pick two products and see every library metric side by side. The better value per line is green, and the bottom line counts how many lines each wins. Not every line matters for your goal (a cheaper kcal-per-€ isn't a win if you're cutting), so read the lines you care about.
 
 ### Settings tab
 - **Left today:** optional. Copy the remaining protein, fat and carbs from MacroFactor; kcal are calculated. Used by *Fit for your day* and *Fill my gap*. The app warns you when the numbers are from an earlier day.
@@ -151,7 +153,7 @@ The site is served by **GitHub Pages** from the `main` branch, root folder, of `
 
 When changing any app file:
 1. Run the tests (below).
-2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v4` → `macro-check-v5`). Without this, phones keep showing the cached old version.
+2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v5` → `macro-check-v6`). Without this, phones keep showing the cached old version.
 3. Commit and push to `main`.
 4. On the phone, close and reopen the app once to load the new version.
 
@@ -164,7 +166,7 @@ Commits use the GitHub noreply address (`317667440+DynamicUnicorn@users.noreply.
 ```
 node tests.js
 ```
-Runs hand-calculated checks for parsing (comma decimals), scaling, every metric, the budget fit and max amount, liquids, price per kg/litre, sorting (including A–Z), Fill my gap, Compare, the rescan merge rules (edited fields kept), price history, CSV output and barcode checksums. All test products are synthetic examples, not real label data.
+Runs hand-calculated checks for parsing (comma decimals), scaling, every metric, the budget fit and max amount, liquids, price per kg/litre, sorting (including A–Z), aliases and search, Fill my gap, Compare, the rescan merge rules (edited fields kept), price history, CSV output and barcode checksums. All test products are synthetic examples, not real label data.
 
 ---
 
@@ -186,6 +188,7 @@ Runs hand-calculated checks for parsing (comma decimals), scaling, every metric,
 
 All dates dd/mm/yyyy.
 
+- **23/10/2026 – v5**: custom names (aliases) shown everywhere without changing the product name; compact searchable item picker for Compare.
 - **23/10/2026 – v4**: Tools tab with *Fill my gap* and *Compare*; flashlight in the scanner; saved servings; price history; *Rescan library* (keeps your own edits); *Left today* moved to Settings.
 - **23/10/2026 – v3**: liquids (ml) support, € per kg/litre (and per kg drained), A–Z sorting, this documentation.
 - **23/10/2026 – v2**: scan page reordered (item and numbers first, fit and *Left today* at the bottom); crowd price suggestion from Open Prices.

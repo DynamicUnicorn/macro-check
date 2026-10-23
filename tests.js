@@ -65,7 +65,7 @@ eq('sort worst', MC.sortProducts(list, 'pPer100kcal', 'worst')[0].prod.name, 'a'
 
 // csv
 const csv = MC.toCsv([{ name: 'Kwark, "mager"', p: 10, priceDate: '23/10/2026' }]);
-eq('csv quoting', csv.split('\n')[1].startsWith('"Kwark, ""mager"""'), true);
+eq('csv quoting', csv.split('\n')[1].startsWith(',"Kwark, ""mager"""'), true);
 
 // barcodes (real, well-known public EANs used only as checksum examples)
 eq('ean13 valid', MC.validBarcode('4006381333931'), true);
@@ -152,6 +152,19 @@ eq('stats change %', st.changePct, (1.79 - 1.49) / 1.49 * 100);
 eq('price updated', ph.price, 1.79);
 eq('zero price ignored', MC.recordPrice(ph, 0, 'x'), false);
 eq('no history stats null', MC.priceStats({}), null);
+
+// ---- aliases ----
+const al1 = { alias: '  Quark ', name: 'Magere kwark lactosevrij', brand: 'AH' };
+eq('alias wins', MC.displayName(al1), 'Quark');
+eq('name when no alias', MC.displayName({ name: 'Tonijn' }), 'Tonijn');
+eq('empty alias ignored', MC.displayName({ alias: '  ', name: 'Tonijn' }), 'Tonijn');
+eq('search by alias', MC.matches(al1, 'quar'), true);
+eq('search by real name', MC.matches(al1, 'LACTOSE'), true);
+eq('search by brand', MC.matches(al1, 'ah'), true);
+eq('search miss', MC.matches(al1, 'tuna'), false);
+eq('A-Z uses alias', MC.sortProducts([{ name: 'Aardbei', alias: 'Zzz' }, { name: 'Banaan' }], 'name', 'best')[0].prod.name, 'Banaan');
+eq('alias survives rescan merge', MC.mergeLookup({ tracked: true, edited: {}, alias: 'Quark', name: 'x' }, { name: 'y' }).prod.alias, 'Quark');
+eq('csv alias first column', MC.toCsv([al1]).split('\n')[1].startsWith('  Quark ,'), true);
 
 console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
 process.exit(fails ? 1 : 0);

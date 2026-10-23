@@ -107,6 +107,19 @@
   .ph { font-size: .85rem; margin-top: 6px; }
   .ph span { white-space: nowrap; }
   #scanner .bar .btns { display: flex; gap: 8px; }
+  .pick { width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    background: var(--bg); min-height: 44px; padding: 8px 10px; }
+  .pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #picker { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 25; display: flex; align-items: flex-end; justify-content: center; }
+  #picker .sheet { background: var(--card); width: 100%; max-width: 640px; max-height: 85vh; border-radius: 16px 16px 0 0;
+    display: flex; flex-direction: column; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+  #picker .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  #pickList { overflow-y: auto; margin-top: 6px; -webkit-overflow-scrolling: touch; }
+  .pk { display: flex; width: 100%; justify-content: space-between; align-items: baseline; gap: 8px; text-align: left;
+    border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; min-height: 40px; padding: 7px 4px; font-size: .95rem; }
+  .pk .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pk small { color: var(--muted); white-space: nowrap; font-size: .75rem; }
+  .pk.sel { color: var(--accent); font-weight: 700; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -167,8 +180,8 @@
     <div class="card">
       <h3 style="margin-top:0">Compare two items</h3>
       <div class="grid2">
-        <select id="cmpA" aria-label="First item"></select>
-        <select id="cmpB" aria-label="Second item"></select>
+        <button class="pick" id="cmpA" aria-label="First item"><span>…</span>▾</button>
+        <button class="pick" id="cmpB" aria-label="Second item"><span>…</span>▾</button>
       </div>
       <div id="cmpTable" style="margin-top:8px"></div>
     </div>
@@ -218,7 +231,7 @@
     </div>
     <div class="card muted">
       Product data comes from <b>Open Food Facts</b> (crowd-sourced, so check the numbers against the label).
-      Only the barcode you scan is sent to them (and to Open Prices for price suggestions). Macro Check v4
+      Only the barcode you scan is sent to them (and to Open Prices for price suggestions). Macro Check v5
     </div>
   </section>
 </main>
@@ -234,6 +247,13 @@
   <video id="video" playsinline muted></video>
   <div class="frame"></div>
   <div class="bar"><span id="scanStatus">…</span><span class="btns"><button id="torchBtn" hidden>🔦 Light</button><button id="scanClose">Close</button></span></div>
+</div>
+<div id="picker" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="pickTitle">
+    <div class="head"><b id="pickTitle">Pick an item</b><button class="small" id="pickClose">Close</button></div>
+    <input type="text" id="pickSearch" placeholder="Search your name, product name or brand…" autocomplete="off">
+    <div id="pickList"></div>
+  </div>
 </div>
 <div id="toast"></div>
 
@@ -333,7 +353,8 @@
     if (!p) { box.innerHTML = '<div class="card muted">Scan a barcode, or add an item manually, to see how it fits your day.</div>'; return; }
     box.innerHTML =
       '<div class="card">' +
-      '<input type="text" class="name" id="f_name" placeholder="Name" value="' + esc(p.name) + '" autocomplete="off">' +
+      '<label class="f">Your name for it (optional, shown everywhere)<input type="text" class="name" id="f_alias" placeholder="e.g. Quark" value="' + esc(p.alias || '') + '" autocomplete="off"></label>' +
+      '<label class="f" style="margin-top:6px">Product name (from the label / Open Food Facts)<input type="text" id="f_name" placeholder="Product name" value="' + esc(p.name) + '" autocomplete="off"></label>' +
       '<div class="sub">' + esc(p.brand) + (p.brand && p.barcode ? ' · ' : '') + esc(p.barcode) +
       (p.source === 'off' ? ' · Open Food Facts' : ' · manual') + '</div>' +
       '<div id="notices"></div>' +
@@ -442,6 +463,7 @@
   $('#item').addEventListener('input', function (e) {
     var p = cur(), t = e.target; if (!p) return;
     if (t.id === 'f_name') { p.name = t.value; markEdited(p, 'name'); saveProducts(); return; }
+    if (t.id === 'f_alias') { p.alias = t.value; saveProducts(); return; }
     if (t.id === 'amt') { state.amount = MC.num(t.value); renderResults(); return; }
     var k = t.dataset && t.dataset.k; if (!k) return;
     p[k] = MC.num(t.value);
@@ -507,7 +529,7 @@
       }
       return;
     }
-    if (t.id === 'delItem' && p && confirm('Delete “' + (p.name || 'this item') + '”?')) {
+    if (t.id === 'delItem' && p && confirm('Delete “' + (MC.displayName(p) || 'this item') + '”?')) {
       delete state.products[p.id]; saveProducts(); state.currentId = null; renderItem(); renderResults();
     }
   });
@@ -667,7 +689,7 @@
   $('#barcodeInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('#btnLookup').click(); });
   $('#btnManual').addEventListener('click', function () {
     var p = newProduct({}); state.products[p.id] = p; saveProducts(); openProduct(p.id);
-    var n = $('#f_name'); if (n) n.focus();
+    var n = $('#f_alias'); if (n) n.focus();
   });
 
   // ---------- scanner ----------
@@ -776,7 +798,7 @@
     $('#dirBtn').textContent = MC.metricDef(state.ui.sort).text ? (state.ui.dir === 'best' ? 'A → Z' : 'Z → A') : (state.ui.dir === 'best' ? 'Best first' : 'Worst first');
     var q = $('#search').value.trim().toLowerCase();
     var all = Object.values(state.products);
-    var list = all.filter(function (p) { return !q || (p.name + ' ' + p.brand).toLowerCase().indexOf(q) >= 0; });
+    var list = all.filter(function (p) { return MC.matches(p, q); });
     var rows = MC.sortProducts(list, state.ui.sort, state.ui.dir), def = MC.metricDef(state.ui.sort);
     var isText = !!def.text;
     if (!all.length) { $('#libList').innerHTML = '<p class="muted">Nothing here yet. Scanned and manual items show up in this list.</p>'; return; }
@@ -791,7 +813,8 @@
       var flags = (MC.sanity(p) ? ' ⚠️' : '') + (MC.isIncomplete(p) ? ' ❓' : '');
       var unit = def.unit === '€' ? '' : ' ' + def.unit;
       h += '<div class="lib-row" data-id="' + esc(p.id) + '"><div class="rank">' + (v != null || isText ? i + 1 : '') + '</div>' +
-        '<div><div class="nm">' + esc(p.name || '(no name)') + flags + '</div>' +
+        '<div><div class="nm">' + esc(MC.displayName(p) || '(no name)') + flags + '</div>' +
+        (p.alias && p.alias.trim() && p.name ? '<div class="sub" style="font-style:italic">' + esc(p.name) + '</div>' : '') +
         '<div class="sub">' + fmt(m.kcal, 0) + ' kcal · P ' + fmt(m.p100) + ' · F ' + fmt(m.f100) + ' · C ' + fmt(m.c100) + ' per 100 ' + MC.unit(p) +
         (p.price > 0 ? ' · ' + eur(p.price) : '') + '</div></div>' +
         '<div class="val">' + (isText ? '' : v == null ? '<small>n/a</small>' : (def.unit === '€' ? '€' + v.toFixed(def.dec) : fmt(v, def.dec) + '<small>' + unit + '</small>')) + '</div>' +
@@ -816,7 +839,7 @@
     btn.disabled = true;
     for (var i = 0; i < items.length; i++) {
       var id = items[i].id, p = state.products[id]; if (!p) continue;
-      logEl.textContent = 'Rescanning ' + (i + 1) + '/' + items.length + ': ' + (p.name || p.barcode) + '…';
+      logEl.textContent = 'Rescanning ' + (i + 1) + '/' + items.length + ': ' + (MC.displayName(p) || p.barcode) + '…';
       var changes = [];
       try {
         var found = await fetchOff(p.barcode);
@@ -838,7 +861,7 @@
           changes.push('price €' + h.price.toFixed(2) + (h.store ? ' (' + h.store + ')' : ''));
         }
       }
-      if (changes.length) lines.push('<b>' + esc(p.name || p.barcode) + '</b>: ' + esc(changes.join(', ')));
+      if (changes.length) lines.push('<b>' + esc(MC.displayName(p) || p.barcode) + '</b>: ' + esc(changes.join(', ')));
       saveProducts();
       if (i < items.length - 1) await sleep(700);   // stay well inside Open Food Facts' rate limits
     }
@@ -876,7 +899,7 @@
         var packs = p.pack > 0 ? ' · ' + fmt(r.amount / p.pack, 1) + ' pack' : '';
         var cost = p.price > 0 && w > 0 ? ' · ' + eur(p.price * r.amount / w) : '';
         return '<div class="gap-row" data-id="' + esc(p.id) + '" data-amt="' + r.amount + '">' +
-          '<div class="top"><span>' + esc(p.name || '(no name)') + '</span><span class="pct">' + fmt(r.score * 100, 0) + '%</span></div>' +
+          '<div class="top"><span>' + esc(MC.displayName(p) || '(no name)') + '</span><span class="pct">' + fmt(r.score * 100, 0) + '%</span></div>' +
           '<div class="sub">Eat up to <b>' + fmt(Math.floor(r.amount), 0) + ' ' + u + '</b>' + packs + cost +
           ' → ' + fmt(r.got.kcal, 0) + ' kcal · P ' + fmt(r.got.p) + ' · F ' + fmt(r.got.f) + ' · C ' + fmt(r.got.c) +
           ' · limit: ' + LIMIT_LABEL[r.limit] + '</div>' +
@@ -903,14 +926,47 @@
   function renderCompareSelects() {
     var list = sortedByName();
     ['cmpA', 'cmpB'].forEach(function (id, idx) {
-      var sel = $('#' + id), want = state.ui[id];
+      var want = state.ui[id];
       if (!want || !state.products[want]) want = list[idx] ? list[idx].id : '';
       state.ui[id] = want;
-      sel.innerHTML = list.map(function (p) {
-        return '<option value="' + esc(p.id) + '"' + (p.id === want ? ' selected' : '') + '>' + esc(p.name || '(no name)') + '</option>';
-      }).join('');
+      var p = state.products[want];
+      $('#' + id + ' span').textContent = p ? (MC.displayName(p) || '(no name)') : 'Pick…';
     });
   }
+  ['cmpA', 'cmpB'].forEach(function (id) {
+    $('#' + id).addEventListener('click', function () {
+      openPicker(id === 'cmpA' ? 'First item' : 'Second item', state.ui[id], function (pid) {
+        state.ui[id] = pid; saveUi(); renderCompareSelects(); renderCompare();
+      });
+    });
+  });
+
+  // ---------- item picker (compact, searchable) ----------
+  var pickCb = null, pickSel = null;
+  function openPicker(title, selectedId, cb) {
+    pickCb = cb; pickSel = selectedId;
+    $('#pickTitle').textContent = title; $('#pickSearch').value = '';
+    renderPick(); $('#picker').hidden = false;
+    var s = $('#pickList .sel'); if (s && s.scrollIntoView) s.scrollIntoView({ block: 'center' });
+  }
+  function closePicker() { $('#picker').hidden = true; pickCb = null; }
+  function renderPick() {
+    var q = $('#pickSearch').value, list = sortedByName().filter(function (p) { return MC.matches(p, q); });
+    $('#pickList').innerHTML = list.length ? list.map(function (p) {
+      var m = MC.metrics(p);
+      return '<button class="pk' + (p.id === pickSel ? ' sel' : '') + '" data-id="' + esc(p.id) + '">' +
+        '<span class="n">' + esc(MC.displayName(p) || '(no name)') +
+        (p.alias && p.alias.trim() && p.name ? ' <small>' + esc(p.name) + '</small>' : '') + '</span>' +
+        '<small>' + fmt(m.kcal, 0) + ' kcal · P ' + fmt(m.p100) + '</small></button>';
+    }).join('') : '<p class="muted">No item matches “' + esc(q) + '”.</p>';
+  }
+  $('#pickSearch').addEventListener('input', renderPick);
+  $('#pickList').addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('.pk'); if (!b) return;
+    var cb = pickCb; closePicker(); if (cb) cb(b.dataset.id);
+  });
+  $('#pickClose').addEventListener('click', closePicker);
+  $('#picker').addEventListener('click', function (e) { if (e.target.id === 'picker') closePicker(); });
   function cmpVal(r, v) {
     if (v == null || !Number.isFinite(v)) return '—';
     return r.unit === '€' ? eur(v) : fmt(v, r.dec) + (r.unit ? ' ' + r.unit : '');
@@ -921,7 +977,7 @@
     if (!a || !b || a === b) { box.innerHTML = '<p class="muted">Pick two different items.</p>'; return; }
     var rows = MC.compare(a, b), wa = 0, wb = 0;
     rows.forEach(function (r) { if (r.winner === 'a') wa++; if (r.winner === 'b') wb++; });
-    box.innerHTML = '<table><thead><tr><th></th><th>' + esc(a.name || 'A') + '</th><th>' + esc(b.name || 'B') + '</th></tr></thead><tbody>' +
+    box.innerHTML = '<table><thead><tr><th></th><th>' + esc(MC.displayName(a) || 'A') + '</th><th>' + esc(MC.displayName(b) || 'B') + '</th></tr></thead><tbody>' +
       rows.map(function (r) {
         return '<tr><td>' + esc(r.label) + (r.better === 'low' ? '' : '') + '</td>' +
           '<td class="' + (r.winner === 'a' ? 'win' : '') + '">' + cmpVal(r, r.a) + '</td>' +
@@ -930,9 +986,6 @@
       '<tr><td><b>Better on</b></td><td><b>' + wa + '</b></td><td><b>' + wb + '</b></td></tr></tbody></table>' +
       '<p class="muted" style="margin:6px 0 0">Green = better on that line. Lower is better for prices and kcal per 100; higher for everything else. Not every line matters for your goal.</p>';
   }
-  ['cmpA', 'cmpB'].forEach(function (id) {
-    $('#' + id).addEventListener('change', function (e) { state.ui[id] = e.target.value; saveUi(); renderCompare(); });
-  });
 
   // ---------- settings ----------
   function loadTargets() {
