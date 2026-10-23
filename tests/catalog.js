@@ -71,6 +71,16 @@ eq('different name not merged (ontdooid)', dd.rows.some((r) => /ontdooid/.test(r
 eq('real variants with different macros kept', dd.rows.filter((r) => r[1] === '100% pindakaas').length, 2);
 eq('same name, different shop brand not merged', dd.rows.filter((r) => r[1] === 'Tonijn steaks').length, 2);
 eq('merged count', dd.merged, 3);
+const dd2 = dedupe([
+  R('8718265891234', 'AH Tonijnsteak wit', 'Albert Heijn', 'A', 150, 144, 24, 5.4, 0),
+  R('2303171504628', 'Tonijnsteak Wit', 'AH', 'A', null, 145, 24, 5.4, 0),
+  R('39964045', 'Tonijn Steak', 'Albert Heijn', 'A', 260, 144, 24, 5.4, 0),
+  R('8718265830394', 'Tonijnsteak', 'Albert Heijn', 'A', 260, 144, 24, 5.4, 0),
+  R('8718452931811', 'Jumbo Penne', 'Jumbo', 'J', 500, 350, 12, 1.5, 70),
+  R('8718452931812', 'Penne Rigate', 'Jumbo', 'J', 500, 350, 12, 1.5, 70)
+]);
+eq('shop prefix and spacing ignored', dd2.rows.length, 4);
+eq('different words not merged (penne vs penne rigate)', dd2.rows.filter((r) => /penne/i.test(r[1])).length, 2);
 
 // ---- full build from a fake export ----
 const H = ['code', 'product_name', 'brands', 'brands_tags', 'stores', 'countries_tags', 'quantity',

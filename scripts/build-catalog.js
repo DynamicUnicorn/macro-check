@@ -91,6 +91,9 @@ function addRow(map, row) {
 // shop brand, the same name (ignoring case/punctuation) and macros equal within rounding. Other barcodes go to 'alt'.
 const isInStore = (code) => code.length === 13 && code[0] === '2';
 const normName = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+// Comparison key for names: lower case, no accents/punctuation/spaces, leading shop name removed
+// ("AH Tonijnsteak wit" = "Tonijnsteak Wit", "Tonijn Steak" = "Tonijnsteak").
+const nameKey = (s) => normName(s).replace(/^(albert heijn|ah|jumbo|picnic)\s+/, '').replace(/\s+/g, '');
 function brandFamily(b) {
   const n = normName(b).replace(/\s+/g, '');
   if (/^(ah|albertheijn)/.test(n)) return 'ah';
@@ -105,7 +108,7 @@ function sameMacros(a, b) {
 function dedupe(rows) {
   const groups = new Map();
   for (const r of rows) {
-    const k = brandFamily(r[2]) + '|' + normName(r[1]);
+    const k = brandFamily(r[2]) + '|' + nameKey(r[1]);
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(r);
   }
