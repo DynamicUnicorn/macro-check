@@ -7,7 +7,9 @@ const path = require('path');
 const dir = path.join(__dirname, '..') + path.sep;
 let html = fs.readFileSync(dir + 'index.html', 'utf8');
 const core = fs.readFileSync(dir + 'core.js', 'utf8');
-html = html.replace('<script src="core.js"></script>', '<script>' + core + '</script>');
+const tag = html.match(/<script src="core\.js(\?v=\d+)?"><\/script>/);
+if (!tag) throw new Error('core.js script tag not found in index.html');
+html = html.replace(tag[0], () => '<script>' + core + '</script>');
 
 const errors = [];
 const vc = new VirtualConsole();

@@ -158,6 +158,7 @@ Both databases are crowd-sourced: always glance at the label. If a product isn't
 | `scripts/build-catalog.js` | Builds the catalogue from Open Food Facts (no dependencies). |
 | `catalog/catalog.json` | The catalogue itself, written by the weekly workflow. Don't edit by hand. |
 | `.github/workflows/catalog.yml` | Weekly/on-demand catalogue build; commits the result and republishes the site. |
+| `tests/release.js` | Checks the release number is the same in all four places. |
 | `tests/catalog.js` | Tests for the catalogue builder, against a fake Open Food Facts export. |
 | `CLAUDE.md` | Project conventions for Claude when working on this repo in a new session. |
 | `README.md` | This document. |
@@ -170,7 +171,7 @@ The site is served by **GitHub Pages** from the `main` branch, root folder, of `
 
 When changing any app file:
 1. Run the tests: `npm test` (see below).
-2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v10` → `macro-check-v11`). Without this, phones keep showing the cached old version.
+2. **Bump the release number** in four places together: `VERSION` in `sw.js`, `core.js?v=N` in `sw.js` and in `index.html`, and "Macro Check vN" in Settings. `npm test` checks they match. Without this, phones keep the old version, or worse, mix a new page with an old `core.js`.
 3. Commit and push to `main`.
 4. On the phone, close and reopen the app once to load the new version.
 
@@ -272,6 +273,7 @@ The app can keep a copy of your **product library** in a **private** repo, `Dyna
 
 All dates dd/mm/yyyy.
 
+- **24/10/2026 – v11**: fixed updates loading a stale `core.js` next to a new page (the file now carries the release number; the offline cache bypasses the browser cache on update).
 - **24/10/2026 – v10**: catalogue also merges the same product under different names (with "also:" names, searchable); the app always loads the newest catalogue when online.
 - **23/10/2026 – v9**: catalogue duplicates merged (about 1,600 copies, mostly in-store barcodes); merged barcodes still recognised when scanning.
 - **23/10/2026 – v8**: readable link colour in dark mode.

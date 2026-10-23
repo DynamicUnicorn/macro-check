@@ -1,9 +1,11 @@
 // Offline shell cache. Bump VERSION whenever any app file changes so phones pick up the update.
-const VERSION = 'macro-check-v10';
-const SHELL = ['./', 'index.html', 'core.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const VERSION = 'macro-check-v11';
+// core.js carries the release number so a new page can never run an old core.js (keep in sync with index.html).
+const SHELL = ['./', 'index.html', 'core.js?v=11', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' bypasses the browser's HTTP cache, so a new release never stores an old file
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {

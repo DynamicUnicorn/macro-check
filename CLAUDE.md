@@ -6,8 +6,9 @@ Full user and technical documentation: README.md. Read it before changing behavi
 ## Conventions
 - No build step and no frameworks: plain `index.html` (UI) + `core.js` (all calculations, DOM-free).
   Put new calculations in `core.js` and cover them in `tests/unit.js` with hand-checked numbers.
-- Every app change: run `npm test`, bump `VERSION` in `sw.js` (`macro-check-vN` → `vN+1`),
-  update the "Macro Check vN" text in Settings, README (features + changelog), then push to `main`.
+- Every app change: bump the release number in FOUR places together: `VERSION` in `sw.js`, `core.js?v=N` in
+  `sw.js` SHELL and in `index.html`'s script tag, and the "Macro Check vN" text in Settings (`tests/release.js` fails
+  otherwise). Then `npm test`, README (features + changelog), push to `main`.
 - Dates shown to the user are dd/mm/yyyy (`MC.dmy`).
 - Free services only (Open Food Facts, Open Prices); no paid APIs, no API keys.
 - User data lives only in the phone's localStorage. Never break existing stored items:
