@@ -92,5 +92,66 @@ eq('Z-A', MC.sortProducts(al, 'name', 'worst')[0].prod.name, 'item 10');
 eq('Z-A unnamed last', MC.sortProducts(al, 'name', 'worst')[4].prod.name, '');
 eq('csv has unit', MC.toCsv([milk]).split('\n')[1].includes(',ml,1000,'), true);
 
+// ---- fill my gap ----
+// gap 40 P / 10 F / 30 C = 160+90+120 = 370 kcal
+const gap = { p: 40, f: 10, c: 30 };
+const whey = { name: 'whey', kcal: 400, p: 80, f: 5, c: 8 };     // limit: protein at 50 g (P 40, F 2.5, C 4)
+const oats = { name: 'oats', kcal: 380, p: 13, f: 7, c: 60 };    // C limit 50 g, F limit 142.9 -> 50 g: P 6.5, F 3.5, C 30
+const oil = { name: 'oil', kcal: 900, p: 0, f: 100, c: 0 };      // F limit 10 g -> 90 kcal
+const gp = MC.fillGap([whey, oats, oil, { name: 'bad', p: 1 }], gap, 'p');
+eq('gap protein: whey first', gp[0].prod.name, 'whey');
+eq('gap protein: whey amount', gp[0].amount, 50);
+eq('gap protein: whey score', gp[0].score, 1);
+eq('gap protein: oil excluded (no protein)', gp.some(r => r.prod.name === 'oil'), false);
+eq('gap protein: incomplete excluded', gp.some(r => r.prod.name === 'bad'), false);
+const gk = MC.fillGap([whey, oats, oil], gap, 'kcal');
+eq('gap kcal: whey kcal score', gk.find(r => r.prod.name === 'whey').score, 200 / 370);
+eq('gap kcal: oats limit carbs', gk.find(r => r.prod.name === 'oats').limit, 'c');
+eq('gap kcal: oats first (190 vs 200?)', gk[0].prod.name, 'whey'); // whey 200 kcal, oats 190 kcal, oil 90
+eq('gap: zero focus budget -> empty', MC.fillGap([whey], { p: 0, f: 10, c: 10 }, 'p').length, 0);
+
+// ---- compare ----
+const cmp = MC.compare(whey, oats);
+eq('compare protein/100kcal winner', cmp.find(r => r.key === 'pPer100kcal').winner, 'a');
+eq('compare carbs/100kcal winner', cmp.find(r => r.key === 'cPer100kcal').winner, 'b');
+eq('compare kcal100 lower better', cmp.find(r => r.key === 'kcal100').winner, 'b');
+eq('compare no price -> null', cmp.find(r => r.key === 'costP').winner, null);
+eq('compare excludes name', cmp.some(r => r.key === 'name'), false);
+eq('compare tie', MC.compare(whey, Object.assign({}, whey)).find(r => r.key === 'p100').winner, 'tie');
+
+// ---- rescan merge ----
+const found = { name: 'Halfvolle melk', brand: 'AH', kcal: 46, p: 3.5, f: 1.5, c: 4.7, pack: 1000, unit: 'ml' };
+// tracked item: user typed protein and name; pack empty
+const tr = { tracked: true, edited: { p: true, name: true }, name: 'My milk', p: 3.6, f: 1.4, kcal: 46, pack: null, edible: 200 };
+const mr = MC.mergeLookup(tr, found);
+eq('merge keeps edited name', mr.prod.name, 'My milk');
+eq('merge keeps edited protein', mr.prod.p, 3.6);
+eq('merge updates unedited fat', mr.prod.f, 1.5);
+eq('merge fills pack', mr.prod.pack, 1000);
+eq('merge sets liquid', mr.prod.unit, 'ml');
+eq('merge clears drained for liquid', mr.prod.edible, null);
+eq('merge does not mutate input', tr.f, 1.4);
+// legacy item (no tracking): keeps all existing values, fills only empty ones
+const lg = { name: 'Old', kcal: 50, p: 3, f: 1, c: null, pack: 500 };
+const ml = MC.mergeLookup(lg, found);
+eq('legacy keeps value', ml.prod.p, 3);
+eq('legacy keeps pack', ml.prod.pack, 500);
+eq('legacy fills empty carbs', ml.prod.c, 4.7);
+eq('legacy fills missing unit', ml.prod.unit, 'ml');
+eq('legacy changed list', ml.changed.sort().join(','), 'brand,c,unit');
+
+// ---- price history ----
+const ph = { price: 1.49, priceDate: '01/10/2026' };
+MC.ensureHistory(ph);
+eq('history seeded', ph.priceHistory.length, 1);
+eq('same price no new entry', MC.recordPrice(ph, 1.49, '05/10/2026', 'manual'), false);
+eq('new price entry', MC.recordPrice(ph, 1.79, '20/10/2026', 'manual'), true);
+const st = MC.priceStats(ph);
+eq('stats lowest', st.lowest, 1.49);
+eq('stats change %', st.changePct, (1.79 - 1.49) / 1.49 * 100);
+eq('price updated', ph.price, 1.79);
+eq('zero price ignored', MC.recordPrice(ph, 0, 'x'), false);
+eq('no history stats null', MC.priceStats({}), null);
+
 console.log(fails ? fails + ' FAILED' : 'ALL PASSED');
 process.exit(fails ? 1 : 0);

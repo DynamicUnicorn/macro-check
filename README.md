@@ -5,7 +5,8 @@ A small phone web app for the supermarket aisle. Scan a product's barcode (or ty
 - the calories and macros for that exact amount,
 - how "pure" a source of protein, fat or carbs it is,
 - what it costs per kg/litre and per gram of each macro,
-- how it fits your training-day and rest-day targets, or what you have left today.
+- how it fits your training-day and rest-day targets, or what you have left today,
+- which product in your library best fills what you still need to eat.
 
 It is a companion to MacroFactor, not a replacement: MacroFactor tracks the diet, Macro Check judges whether a product is worth buying.
 
@@ -34,16 +35,21 @@ Live app: https://dynamicunicorn.github.io/macro-check/
 2. Menu → **Add to Home screen**. It then opens like an app and works offline (except lookups).
 3. Go to **Settings** and fill in your **training day** and **rest day** targets (protein, fat, carbs in grams). Calories are calculated as 4×protein + 4×carbs + 9×fat. You only redo this when your targets change.
 
+The app has four tabs: **Scan**, **Library**, **Tools** and **Settings**.
+
 ### Scan tab (top to bottom)
 | Section | What it's for |
 |---|---|
-| **Scan / Manual / barcode box** | Scan with the camera, type a barcode, or add an item by hand. A product you've scanned before opens from your library instantly. |
-| **Item card** | Name, **Solid (g) / Liquid (ml)** switch, label values per 100 g or 100 ml, pack size, drained weight (solids only), price, and the amount you plan to eat. Quick buttons: whole pack, ½ pack, drained, glass (250 ml, liquids), 100 g/ml. |
+| **Scan / Manual / barcode box** | Scan with the camera (tap **🔦 Light** for the flashlight, shown when your phone supports it), type a barcode, or add an item by hand. A product you've scanned before opens from your library instantly. |
+| **Item card** | Name, **Solid (g) / Liquid (ml)** switch, label values per 100 g or 100 ml, pack size, drained weight (solids only), price with **price history**, and the amount you plan to eat. Quick buttons: whole pack, ½ pack, drained, glass (250 ml, liquids), 100 g/ml, plus your own **servings**. |
 | **This amount** | kcal, protein, fat and carbs for the amount entered, plus what that amount costs. |
 | **Quality of the source** | Macros per 100 kcal and each macro's share of the calories. |
 | **Cost** | € per kg or litre (and per kg drained), € per 100 g / 25 g protein, € per 100 g fat and carbs, kcal per €. |
-| **Fit for your day** | One column each for *Left today* (if filled in), *Training day* and *Rest day*: what's left after eating this amount, % of the budget used, and the maximum amount you could eat plus which macro runs out first. Red = over budget, orange = 90 %+ used. The Training/Rest switch only highlights a column. |
-| **Left today** | Optional. Copy the remaining protein, fat and carbs from MacroFactor; kcal are calculated. The app warns you when the numbers are from an earlier day. |
+| **Fit for your day** | One column each for *Left today* (if filled in under Settings), *Training day* and *Rest day*: what's left after eating this amount, % of the budget used, and the maximum amount you could eat plus which macro runs out first. Red = over budget, orange = 90 %+ used. The Training/Rest switch only highlights a column. |
+
+**Servings:** tap **＋ Serving**, give it a name (scoop, egg, slice…) and the grams or ml of one serving. It's saved with that product. Tap the serving to set the amount; tap it again to add another (2 × scoop, 3 × scoop…). ✕ removes it.
+
+**Price history:** every time you change a price (when you leave the field) the old price is kept with its date. Once there are two or more prices you see the last five, the change versus the previous price, and the lowest and highest seen.
 
 **Crowd prices:** after a scan, the app checks Open Prices for a recent shop price for that barcode (Dutch shops preferred). If it finds one you get a **Use** button; it never fills in a price by itself. Most AH products have no crowd price yet, so usually you'll just type the shelf price.
 
@@ -58,7 +64,20 @@ Every scanned or manual item, sortable by:
 
 Quick chips: *Pure protein*, *Pure fat*, *Pure carbs*, *Cheapest protein/fat/carbs*, *A–Z*. The button next to the dropdown flips the order. Items without the needed data (e.g. no price) sit at the bottom marked *n/a*. ⚠️ = label kcal don't match the macros, ❓ = a macro is missing. Tap a row to open it.
 
+**🔄 Rescan library** looks up every item that has a barcode again, about one per second, and shows what changed:
+- Values you typed or changed yourself are **never** replaced. The app remembers per field which ones you edited.
+- Items saved before v4 have no edit history, so for those the rescan only **fills empty fields** and never overwrites an existing value.
+- Fields it can fill or update: name, brand, kcal, macros, fibre, pack size and solid/liquid. Switching to liquid clears the drained weight.
+- **Empty prices** are filled from Open Prices, but only with a price from a Dutch shop. Prices you already have are never touched.
+- Manual items (no barcode) are skipped.
+
+### Tools tab
+**Fill my gap:** enter what you still need to eat (or tap *Use "Left today"*), and choose what to fill mostly: calories, protein, fat or carbs. Every library item gets the **largest amount you can eat without going over any macro or the calories**, ranked by how much of your chosen target that amount fills. Each row shows the amount, number of packs, cost, the macros it delivers and which macro is the limit. Tap a row to open the item with that amount filled in.
+
+**Compare two items:** pick two products and see every library metric side by side. The better value per line is green, and the bottom line counts how many lines each wins. Not every line matters for your goal (a cheaper kcal-per-€ isn't a win if you're cutting), so read the lines you care about.
+
 ### Settings tab
+- **Left today:** optional. Copy the remaining protein, fat and carbs from MacroFactor; kcal are calculated. Used by *Fit for your day* and *Fill my gap*. The app warns you when the numbers are from an earlier day.
 - Training and rest day targets.
 - **Export CSV** (for a spreadsheet), **Backup (JSON)** and **Restore backup**.
 - **Delete all items** (targets are kept).
@@ -81,6 +100,9 @@ All per-100 values are per **100 g** for solids and per **100 ml** for liquids, 
 | kcal per € | weight used × kcal per 100 ÷ 100 ÷ price |
 | Max amount | smallest of (budget ÷ per-100 value × 100) over kcal, P, F and C; negative budgets count as 0 |
 | Label check | flags when label kcal differ from 4P + 9F + 4C + 2×fibre by more than 25 kcal or 15 % |
+| Fill my gap: amount | the max amount above, with your gap as the budget |
+| Fill my gap: score | (chosen macro or kcal delivered at that amount) ÷ (gap for it), capped at 100 % |
+| Price change | (new price − previous price) ÷ previous price |
 
 "Weight used" for cost-per-macro is the drained weight if you entered one (solids), otherwise the pack size. Labels for canned fish usually describe the drained product, so entering the drained weight makes the € per gram protein honest. € per kg always uses the full pack, matching the shelf label.
 
@@ -129,7 +151,7 @@ The site is served by **GitHub Pages** from the `main` branch, root folder, of `
 
 When changing any app file:
 1. Run the tests (below).
-2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v3` → `macro-check-v4`). Without this, phones keep showing the cached old version.
+2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v4` → `macro-check-v5`). Without this, phones keep showing the cached old version.
 3. Commit and push to `main`.
 4. On the phone, close and reopen the app once to load the new version.
 
@@ -142,7 +164,7 @@ Commits use the GitHub noreply address (`317667440+DynamicUnicorn@users.noreply.
 ```
 node tests.js
 ```
-Runs hand-calculated checks for parsing (comma decimals), scaling, every metric, the budget fit and max amount, liquids, price per kg/litre, sorting (including A–Z), CSV output and barcode checksums. All test products are synthetic examples, not real label data.
+Runs hand-calculated checks for parsing (comma decimals), scaling, every metric, the budget fit and max amount, liquids, price per kg/litre, sorting (including A–Z), Fill my gap, Compare, the rescan merge rules (edited fields kept), price history, CSV output and barcode checksums. All test products are synthetic examples, not real label data.
 
 ---
 
@@ -154,6 +176,9 @@ Runs hand-calculated checks for parsing (comma decimals), scaling, every metric,
 - **Pack size and solid/liquid** from Open Food Facts are sometimes missing or wrong; check them for new products.
 - **MacroFactor** has no public API, so "Left today" is typed in by hand.
 - Liquids are handled per 100 ml throughout; there is no conversion between grams and millilitres.
+- **Flashlight** depends on the phone and browser exposing torch control; on phones that don't, the button stays hidden.
+- **Fill my gap** ignores pack size: it may suggest 2.3 packs. It also ranks one product at a time, not combinations.
+- **Rescan** has to stay open while it runs; leaving the app pauses it. Run it again to finish; already-updated items are simply re-checked.
 
 ---
 
@@ -161,6 +186,7 @@ Runs hand-calculated checks for parsing (comma decimals), scaling, every metric,
 
 All dates dd/mm/yyyy.
 
+- **23/10/2026 – v4**: Tools tab with *Fill my gap* and *Compare*; flashlight in the scanner; saved servings; price history; *Rescan library* (keeps your own edits); *Left today* moved to Settings.
 - **23/10/2026 – v3**: liquids (ml) support, € per kg/litre (and per kg drained), A–Z sorting, this documentation.
 - **23/10/2026 – v2**: scan page reordered (item and numbers first, fit and *Left today* at the bottom); crowd price suggestion from Open Prices.
 - **23/10/2026 – v1**: first version: barcode lookup, metrics, training/rest targets, budget fit, library sorting, CSV/backup.

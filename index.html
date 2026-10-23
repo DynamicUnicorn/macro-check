@@ -93,6 +93,20 @@
   #scanner .frame { position: absolute; left: 10%; right: 10%; top: 30%; height: 22%; border: 2px solid rgba(255,255,255,.85); border-radius: 12px; pointer-events: none; }
   #toast { position: fixed; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom)); background: #111827; color: #fff;
     padding: 10px 14px; border-radius: 12px; z-index: 30; display: none; text-align: center; }
+  .srv { display: inline-flex; }
+  .srv .chip:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .srv .chip.x { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 0; padding: 6px 9px; color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  td.win { color: var(--ok); font-weight: 800; }
+  .gap-row { padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .gap-row:last-child { border-bottom: 0; }
+  .gap-row .top { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+  .gap-row .pct { font-weight: 800; white-space: nowrap; }
+  .meter { height: 6px; background: var(--chip); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .meter > div { height: 100%; background: var(--accent); }
+  .ph { font-size: .85rem; margin-top: 6px; }
+  .ph span { white-space: nowrap; }
+  #scanner .bar .btns { display: flex; gap: 8px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -115,18 +129,6 @@
     <div id="item"></div>
     <div id="results"></div>
     <div id="fit"></div>
-    <details class="card" id="remBox">
-      <summary>Left today (from MacroFactor) <span class="muted" id="remSummary"></span></summary>
-      <p class="muted" style="margin:8px 0">Optional. Copy the three “remaining” numbers; calories are worked out for you.</p>
-      <div class="grid4">
-        <label class="f">Protein g<input type="text" inputmode="decimal" id="r_p" autocomplete="off"></label>
-        <label class="f">Fat g<input type="text" inputmode="decimal" id="r_f" autocomplete="off"></label>
-        <label class="f">Carbs g<input type="text" inputmode="decimal" id="r_c" autocomplete="off"></label>
-        <label class="f">kcal<input type="text" id="r_kcal" disabled></label>
-      </div>
-      <div id="remNote" class="muted" style="margin-top:6px"></div>
-      <div class="row-actions" style="margin-top:8px"><button class="small" id="remClear">Clear</button></div>
-    </details>
   </section>
 
   <section id="tab-lib" hidden>
@@ -138,12 +140,54 @@
         <button id="dirBtn" class="small" style="min-width:92px"></button>
       </div>
       <input type="text" id="search" placeholder="Filter by name…" style="margin-top:8px" autocomplete="off">
+      <div class="row-actions" style="margin-top:8px"><button class="small" id="rescanBtn">🔄 Rescan library</button></div>
+      <div id="rescanLog" class="muted" style="font-size:.9rem"></div>
     </div>
     <div class="card" id="libList"></div>
   </section>
 
+  <section id="tab-tools" hidden>
+    <h1>Tools</h1>
+    <div class="card">
+      <h3 style="margin-top:0">Fill my gap</h3>
+      <p class="muted" style="margin:0 0 8px">What do you still need to eat? Ranks your library by how much of the gap each item can fill <b>without going over</b> any macro or the calories.</p>
+      <div class="grid3">
+        <label class="f">Protein g<input type="text" inputmode="decimal" id="g_p" autocomplete="off"></label>
+        <label class="f">Fat g<input type="text" inputmode="decimal" id="g_f" autocomplete="off"></label>
+        <label class="f">Carbs g<input type="text" inputmode="decimal" id="g_c" autocomplete="off"></label>
+      </div>
+      <div class="chips"><button class="chip" id="gapFromRem">Use “Left today”</button></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted">Fill mostly:</span>
+        <div class="seg" id="gapFocus">
+          <button data-f="kcal">Calories</button><button data-f="p">Protein</button><button data-f="f">Fat</button><button data-f="c">Carbs</button>
+        </div>
+      </div>
+      <div id="gapList" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Compare two items</h3>
+      <div class="grid2">
+        <select id="cmpA" aria-label="First item"></select>
+        <select id="cmpB" aria-label="Second item"></select>
+      </div>
+      <div id="cmpTable" style="margin-top:8px"></div>
+    </div>
+  </section>
+
   <section id="tab-set" hidden>
     <h1>Settings</h1>
+    <div class="card" id="remBox">
+      <h3 style="margin-top:0">Left today (from MacroFactor) <span id="remSummary"></span></h3>
+      <p class="muted" style="margin:0 0 8px">Optional. Copy the three “remaining” numbers; calories are worked out for you. Used by <i>Fit for your day</i> and <i>Fill my gap</i>.</p>
+      <div class="grid4">
+        <label class="f">Protein g<input type="text" inputmode="decimal" id="r_p" autocomplete="off"></label>
+        <label class="f">Fat g<input type="text" inputmode="decimal" id="r_f" autocomplete="off"></label>
+        <label class="f">Carbs g<input type="text" inputmode="decimal" id="r_c" autocomplete="off"></label>
+        <label class="f">kcal<input type="text" id="r_kcal" disabled></label>
+      </div>
+      <div id="remNote" class="muted" style="margin-top:6px"></div>
+      <div class="row-actions" style="margin-top:8px"><button class="small" id="remClear">Clear</button></div>
+    </div>
     <div class="card">
       <h3 style="margin-top:0">Training day targets</h3>
       <div class="grid4">
@@ -174,7 +218,7 @@
     </div>
     <div class="card muted">
       Product data comes from <b>Open Food Facts</b> (crowd-sourced, so check the numbers against the label).
-      Only the barcode you scan is sent to them. Macro Check v1.0
+      Only the barcode you scan is sent to them (and to Open Prices for price suggestions). Macro Check v4
     </div>
   </section>
 </main>
@@ -182,13 +226,14 @@
 <nav>
   <button data-tab="scan" class="on"><b>📷</b>Scan</button>
   <button data-tab="lib"><b>📋</b>Library</button>
+  <button data-tab="tools"><b>🎯</b>Tools</button>
   <button data-tab="set"><b>⚙️</b>Settings</button>
 </nav>
 
 <div id="scanner" hidden>
   <video id="video" playsinline muted></video>
   <div class="frame"></div>
-  <div class="bar"><span id="scanStatus">…</span><button id="scanClose">Close</button></div>
+  <div class="bar"><span id="scanStatus">…</span><span class="btns"><button id="torchBtn" hidden>🔦 Light</button><button id="scanClose">Close</button></span></div>
 </div>
 <div id="toast"></div>
 
@@ -236,26 +281,32 @@
     return Object.assign({
       id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
       name: '', brand: '', barcode: '', kcal: null, p: null, f: null, c: null, fiber: null,
-      pack: null, edible: null, price: null, priceDate: '', source: 'manual', added: MC.dmy()
+      pack: null, edible: null, price: null, priceDate: '', priceSource: '', priceHistory: [], servings: [],
+      source: 'manual', added: MC.dmy(), tracked: true, edited: {}
     }, o || {});
   }
   function cur() { return state.currentId ? state.products[state.currentId] : null; }
+  function markEdited(p, k) { if (!p.edited) p.edited = {}; p.edited[k] = true; }
+  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
   // ---------- tabs ----------
   function showTab(name) {
-    ['scan', 'lib', 'set'].forEach(function (t) { $('#tab-' + t).hidden = t !== name; });
+    ['scan', 'lib', 'tools', 'set'].forEach(function (t) { $('#tab-' + t).hidden = t !== name; });
     document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', b.dataset.tab === name); });
     if (name === 'lib') renderLib();
+    if (name === 'tools') renderTools();
     window.scrollTo(0, 0);
   }
   document.querySelectorAll('nav button').forEach(function (b) {
     b.addEventListener('click', function () { showTab(b.dataset.tab); });
   });
 
-  function openProduct(id) {
+  function openProduct(id, amount) {
     state.currentId = id;
     var p = state.products[id];
-    state.amount = (p && MC.edibleWeight(p)) || 100;
+    if (p) { MC.ensureHistory(p); if (!Array.isArray(p.servings)) p.servings = []; }
+    state.amount = amount > 0 ? amount : ((p && MC.edibleWeight(p)) || 100);
+    state.lastSrv = null;
     showTab('scan');
     renderItem();
     renderResults();
@@ -296,12 +347,25 @@
       '<div class="grid3">' + packFields(p).map(function (f) { return inp(p, f); }).join('') + '</div>' +
       '<div id="priceHint"></div>' +
       '<p class="muted" id="priceNote" style="margin:4px 0 0"></p>' +
+      '<div id="priceHist"></div>' +
       '<h3>Amount to eat</h3>' +
       '<label class="f">Amount (' + U(p) + ')<input type="text" inputmode="decimal" id="amt" autocomplete="off" value="' + esc(state.amount == null ? '' : fmt(state.amount, 1)) + '"></label>' +
       '<div class="chips" id="amtChips"></div>' +
+      '<div class="chips" id="srvChips"></div>' +
       '<div class="row-actions" style="margin-top:10px"><button class="danger small" id="delItem">Delete this item</button></div>' +
       '</div>';
-    updateNotices(); updatePriceNote(); renderChips(); renderPriceHint();
+    updateNotices(); updatePriceNote(); renderChips(); renderPriceHint(); renderPriceHist();
+  }
+
+  function renderPriceHist() {
+    var p = cur(), box = $('#priceHist'); if (!p || !box) return;
+    var h = p.priceHistory || [], st = MC.priceStats(p);
+    if (!st || h.length < 2) { box.innerHTML = ''; return; }
+    var parts = h.slice(-5).map(function (e) { return '<span>€' + e.price.toFixed(2) + (e.date ? ' <small class="muted">' + esc(e.date) + '</small>' : '') + '</span>'; });
+    var ch = st.changePct;
+    box.innerHTML = '<div class="ph"><b>Price history</b> ' + (h.length > 5 ? '… ' : '') + parts.join(' → ') +
+      '<br><span class="' + (ch > 0 ? 'neg' : 'okc') + '">' + (ch > 0 ? '▲ +' : '▼ ') + fmt(ch, 0) + '% vs previous</span>' +
+      ' · lowest €' + st.lowest.toFixed(2) + ' · highest €' + st.highest.toFixed(2) + '</div>';
   }
 
   // ---------- crowd prices (Open Prices, by Open Food Facts) ----------
@@ -354,7 +418,7 @@
   function updatePriceNote() {
     var p = cur(), el = $('#priceNote'); if (!p || !el) return;
     var t = [];
-    if (p.price > 0 && p.priceDate) t.push('Price entered ' + esc(p.priceDate));
+    if (p.price > 0 && p.priceDate) t.push('Price from ' + esc(p.priceDate) + (p.priceSource === 'Open Prices' ? ' (Open Prices)' : ''));
     if (U(p) === 'g') t.push('Label values usually describe the drained product, so “Drained g” (if set) is used for cost per macro.');
     el.innerHTML = t.join(' · ');
   }
@@ -368,32 +432,68 @@
     box.innerHTML = chips.map(function (c) {
       return '<button class="chip" data-g="' + c[1] + '">' + c[0] + ' (' + fmt(c[1], 0) + ' ' + U(p) + ')</button>';
     }).join('');
+    var sb = $('#srvChips');
+    sb.innerHTML = (p.servings || []).map(function (sv, i) {
+      return '<span class="srv"><button class="chip" data-srv="' + i + '">1 ' + esc(sv.name) + ' (' + fmt(sv.amount, 0) + ' ' + U(p) + ')</button>' +
+        '<button class="chip x" data-delsrv="' + i + '" aria-label="Remove serving">✕</button></span>';
+    }).join('') + '<button class="chip" id="addSrv">＋ Serving</button>';
   }
 
   $('#item').addEventListener('input', function (e) {
     var p = cur(), t = e.target; if (!p) return;
-    if (t.id === 'f_name') { p.name = t.value; saveProducts(); return; }
+    if (t.id === 'f_name') { p.name = t.value; markEdited(p, 'name'); saveProducts(); return; }
     if (t.id === 'amt') { state.amount = MC.num(t.value); renderResults(); return; }
     var k = t.dataset && t.dataset.k; if (!k) return;
     p[k] = MC.num(t.value);
+    markEdited(p, k);
     if (k === 'price') p.priceDate = p.price > 0 ? MC.dmy() : '';
     saveProducts(); updateNotices(); updatePriceNote();
     if (k === 'pack' || k === 'edible') renderChips();
     renderResults();
   });
+  // price history: one entry per committed change (on leaving the field), not per keystroke
+  $('#item').addEventListener('change', function (e) {
+    var p = cur(), t = e.target;
+    if (!p || !t.dataset || t.dataset.k !== 'price') return;
+    if (p.price > 0) { p.priceSource = 'manual'; MC.recordPrice(p, p.price, MC.dmy(), 'manual'); saveProducts(); renderPriceHist(); }
+  });
   $('#item').addEventListener('click', function (e) {
     var p = cur(), t = e.target;
     var chip = t.closest && t.closest('.chip');
-    if (chip && p) {
-      state.amount = parseFloat(chip.dataset.g);
+    if (chip && p && chip.dataset.delsrv != null) {
+      var di = +chip.dataset.delsrv, dsv = p.servings[di];
+      if (dsv && confirm('Remove serving “' + dsv.name + '”?')) { p.servings.splice(di, 1); saveProducts(); renderChips(); }
+      return;
+    }
+    if (chip && p && chip.id === 'addSrv') {
+      var nm = prompt('Serving name (e.g. scoop, egg, slice, bowl):');
+      if (!nm || !nm.trim()) return;
+      var am = MC.num(prompt('How many ' + U(p) + ' is 1 ' + nm.trim() + '?', state.amount > 0 ? fmt(state.amount, 1) : ''));
+      if (!(am > 0)) { toast('Serving not saved: enter an amount above 0'); return; }
+      p.servings.push({ name: nm.trim(), amount: am }); saveProducts(); renderChips();
+      toast('Saved: 1 ' + nm.trim() + ' = ' + fmt(am, 1) + ' ' + U(p));
+      return;
+    }
+    if (chip && p && chip.dataset.srv != null) {
+      var si = +chip.dataset.srv, sv = p.servings[si]; if (!sv) return;
+      // tap again to add another serving
+      var n = (state.lastSrv && state.lastSrv.i === si && Math.abs(state.amount - state.lastSrv.n * sv.amount) < 0.01) ? state.lastSrv.n + 1 : 1;
+      state.lastSrv = { i: si, n: n };
+      state.amount = n * sv.amount;
+      $('#amt').value = fmt(state.amount, 1);
+      if (n > 1) toast(n + ' × ' + sv.name + ' = ' + fmt(state.amount, 1) + ' ' + U(p));
+      renderResults(); return;
+    }
+    if (chip && p && chip.dataset.g != null) {
+      state.amount = parseFloat(chip.dataset.g); state.lastSrv = null;
       $('#amt').value = fmt(state.amount, 1);
       renderResults(); return;
     }
     var us = t.closest && t.closest('#unitSeg button');
     if (us && p) {
       if (p.unit !== us.dataset.u) {
-        p.unit = us.dataset.u;
-        if (p.unit === 'ml') p.edible = null;   // drained weight makes no sense for liquids
+        p.unit = us.dataset.u; markEdited(p, 'unit');
+        if (p.unit === 'ml') { p.edible = null; markEdited(p, 'edible'); }   // drained weight makes no sense for liquids
         saveProducts(); renderItem(); renderResults();
       }
       return;
@@ -401,9 +501,9 @@
     if (t.id === 'usePrice' && p) {
       var hh = priceHints[p.barcode];
       if (hh && hh.price) {
-        p.price = hh.price; p.priceDate = hh.date || MC.dmy(); saveProducts();
+        MC.recordPrice(p, hh.price, hh.date || MC.dmy(), 'Open Prices'); saveProducts();
         var pi = document.querySelector('[data-k="price"]'); if (pi) pi.value = hh.price;
-        updatePriceNote(); renderResults(); toast('Price filled in. Check it against the shelf.');
+        updatePriceNote(); renderPriceHist(); renderResults(); toast('Price filled in. Check it against the shelf.');
       }
       return;
     }
@@ -523,6 +623,23 @@
 
   // ---------- lookup ----------
   var stripZ = function (s) { return String(s).replace(/^0+/, ''); };
+  // Returns lookup fields, or null when the barcode isn't in Open Food Facts. Throws on network errors.
+  async function fetchOff(code) {
+    var r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(code) +
+      '.json?fields=code,product_name,brands,nutriments,product_quantity,product_quantity_unit,quantity');
+    if (!r.ok && r.status !== 404) throw new Error('HTTP ' + r.status);
+    var j = await r.json();
+    if (j.status !== 1 || !j.product) return null;
+    var pr = j.product, n = pr.nutriments || {};
+    var g = function (k) { return typeof n[k] === 'number' ? n[k] : MC.num(n[k]); };
+    var qu = String(pr.product_quantity_unit || '').toLowerCase();
+    return {
+      name: pr.product_name || '', brand: (pr.brands || '').split(',')[0].trim(),
+      kcal: g('energy-kcal_100g'), p: g('proteins_100g'), f: g('fat_100g'), c: g('carbohydrates_100g'),
+      fiber: g('fiber_100g'), pack: MC.num(pr.product_quantity),
+      unit: /^(ml|cl|l)$/.test(qu) ? 'ml' : (/^(g|kg|mg)$/.test(qu) ? 'g' : null)
+    };
+  }
   async function lookup(raw) {
     var code = String(raw || '').replace(/\D/g, '');
     if (!code) { toast('Enter a barcode'); return; }
@@ -531,22 +648,13 @@
     toast('Looking up ' + code + '…');
     var prod;
     try {
-      var r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(code) +
-        '.json?fields=code,product_name,brands,nutriments,product_quantity,product_quantity_unit,quantity');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      var j = await r.json();
-      if (j.status !== 1 || !j.product) {
+      var found = await fetchOff(code);
+      if (!found) {
         prod = newProduct({ barcode: code });
         toast('Not in Open Food Facts — enter the macros from the label.');
       } else {
-        var pr = j.product, n = pr.nutriments || {};
-        var g = function (k) { return typeof n[k] === 'number' ? n[k] : MC.num(n[k]); };
-        prod = newProduct({
-          barcode: code, source: 'off', name: pr.product_name || '', brand: (pr.brands || '').split(',')[0].trim(),
-          kcal: g('energy-kcal_100g'), p: g('proteins_100g'), f: g('fat_100g'), c: g('carbohydrates_100g'),
-          fiber: g('fiber_100g'), pack: MC.num(pr.product_quantity),
-          unit: /^(ml|cl|l)$/i.test(pr.product_quantity_unit || '') ? 'ml' : 'g'
-        });
+        prod = newProduct(Object.assign({ barcode: code, source: 'off' }, found));
+        if (!prod.unit) prod.unit = 'g';
         toast('Found. Check the pack weight and add the price.');
       }
     } catch (err) {
@@ -570,7 +678,24 @@
       document.head.appendChild(s);
     });
   }
+  var torchOn = false;
+  function videoTrack() { return scanStream ? scanStream.getVideoTracks()[0] : null; }
+  function setupTorch() {
+    var b = $('#torchBtn'), tr = videoTrack();
+    try {
+      var caps = tr && tr.getCapabilities ? tr.getCapabilities() : null;
+      b.hidden = !(caps && caps.torch);
+    } catch (e) { b.hidden = true; }
+  }
+  $('#torchBtn').addEventListener('click', function () {
+    var tr = videoTrack(); if (!tr) return;
+    var want = !torchOn;
+    tr.applyConstraints({ advanced: [{ torch: want }] }).then(function () {
+      torchOn = want; $('#torchBtn').textContent = torchOn ? '🔦 Light on' : '🔦 Light';
+    }).catch(function () { toast('This camera has no controllable light'); $('#torchBtn').hidden = true; });
+  });
   function closeScanner() {
+    torchOn = false; $('#torchBtn').hidden = true; $('#torchBtn').textContent = '🔦 Light';
     clearInterval(scanTimer); scanTimer = null;
     if (zx) { try { zx.reset(); } catch (e) {} zx = null; }
     if (scanStream) { scanStream.getTracks().forEach(function (t) { t.stop(); }); scanStream = null; }
@@ -592,6 +717,7 @@
     try {
       scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
       v.srcObject = scanStream; await v.play();
+      setupTorch(); setTimeout(setupTorch, 800);   // some phones report the torch only after the stream settles
     } catch (e) {
       st.textContent = 'Camera blocked or unavailable (' + (e.name || e) + '). Close and type the barcode.'; return;
     }
@@ -673,6 +799,140 @@
     });
     $('#libList').innerHTML = h;
   }
+
+  // ---------- rescan library ----------
+  var FIELD_LABEL = { name: 'name', brand: 'brand', kcal: 'kcal', p: 'protein', f: 'fat', c: 'carbs', fiber: 'fibre',
+    pack: 'pack size', unit: 'solid/liquid', edible: 'drained weight cleared' };
+  var rescanning = false;
+  async function rescanLibrary() {
+    if (rescanning) return;
+    var items = Object.values(state.products).filter(function (p) { return p.barcode; });
+    if (!items.length) { toast('No scanned items to rescan'); return; }
+    if (!confirm('Look up all ' + items.length + ' scanned items again?\n\n• Values you typed or changed yourself are kept.\n' +
+      '• Empty prices are filled from Open Prices, only when a Dutch shop price exists.\n• Takes about ' +
+      Math.ceil(items.length * 1.2) + ' s; keep the app open.')) return;
+    rescanning = true;
+    var btn = $('#rescanBtn'), logEl = $('#rescanLog'), lines = [], notFound = 0, failed = 0;
+    btn.disabled = true;
+    for (var i = 0; i < items.length; i++) {
+      var id = items[i].id, p = state.products[id]; if (!p) continue;
+      logEl.textContent = 'Rescanning ' + (i + 1) + '/' + items.length + ': ' + (p.name || p.barcode) + '…';
+      var changes = [];
+      try {
+        var found = await fetchOff(p.barcode);
+        if (found) {
+          var m = MC.mergeLookup(p, found);
+          if (m.changed.length) {
+            state.products[id] = p = m.prod;
+            changes = m.changed.map(function (k) { return FIELD_LABEL[k] || k; });
+            if (m.changed.indexOf('unit') >= 0) changes[m.changed.indexOf('unit')] = p.unit === 'ml' ? 'now liquid' : 'now solid';
+          }
+        } else notFound++;
+      } catch (e) { failed++; }
+      if (!(p.price > 0)) {
+        delete priceHints[p.barcode];
+        await fetchPriceHint(p.barcode);
+        var h = priceHints[p.barcode];
+        if (h && h.price && h.nlCount) {
+          MC.ensureHistory(p); MC.recordPrice(p, h.price, h.date || MC.dmy(), 'Open Prices');
+          changes.push('price €' + h.price.toFixed(2) + (h.store ? ' (' + h.store + ')' : ''));
+        }
+      }
+      if (changes.length) lines.push('<b>' + esc(p.name || p.barcode) + '</b>: ' + esc(changes.join(', ')));
+      saveProducts();
+      if (i < items.length - 1) await sleep(700);   // stay well inside Open Food Facts' rate limits
+    }
+    rescanning = false; btn.disabled = false;
+    logEl.innerHTML = '<p style="margin:8px 0 4px"><b>Rescan done.</b> ' + lines.length + ' of ' + items.length + ' items updated' +
+      (notFound ? ', ' + notFound + ' not in Open Food Facts' : '') + (failed ? ', ' + failed + ' failed (network)' : '') + '.</p>' +
+      (lines.length ? '<div>' + lines.join('<br>') + '</div>' : '');
+    renderLib();
+    if (cur()) { renderItem(); renderResults(); }
+  }
+  $('#rescanBtn').addEventListener('click', rescanLibrary);
+
+  // ---------- tools: fill my gap ----------
+  state.gap = state.gap || { p: null, f: null, c: null };
+  function sortedByName() {
+    return MC.sortProducts(Object.values(state.products), 'name', 'best').map(function (r) { return r.prod; });
+  }
+  function renderTools() { loadGapInputs(); renderGap(); renderCompareSelects(); renderCompare(); }
+  function loadGapInputs() {
+    ['p', 'f', 'c'].forEach(function (k) { var el = $('#g_' + k); if (document.activeElement !== el) el.value = state.gap[k] == null ? '' : state.gap[k]; });
+    var foc = state.ui.gapFocus || 'p';
+    document.querySelectorAll('#gapFocus button').forEach(function (b) { b.classList.toggle('on', b.dataset.f === foc); });
+  }
+  function renderGap() {
+    var box = $('#gapList'), g = state.gap, foc = state.ui.gapFocus || 'p';
+    if (g.p == null || g.f == null || g.c == null) { box.innerHTML = '<p class="muted">Enter protein, fat and carbs (0 is fine), or tap “Use Left today”.</p>'; return; }
+    var B = MC.budgetFrom(g);
+    if (!(B[foc] > 0)) { box.innerHTML = '<p class="muted">Nothing left to fill for ' + (foc === 'kcal' ? 'calories' : LIMIT_LABEL[foc]) + '.</p>'; return; }
+    var rows = MC.fillGap(Object.values(state.products), g, foc).slice(0, 12);
+    if (!rows.length) { box.innerHTML = '<p class="muted">No item in your library fits this gap.</p>'; return; }
+    var what = foc === 'kcal' ? 'of the ' + fmt(B.kcal, 0) + ' kcal' : 'of the ' + fmt(B[foc], 0) + ' g ' + LIMIT_LABEL[foc];
+    box.innerHTML = '<p class="muted" style="margin:0 0 4px">Max amount per item, and how much ' + what + ' it fills. Tap to open.</p>' +
+      rows.map(function (r) {
+        var p = r.prod, u = MC.unit(p), w = MC.edibleWeight(p);
+        var packs = p.pack > 0 ? ' · ' + fmt(r.amount / p.pack, 1) + ' pack' : '';
+        var cost = p.price > 0 && w > 0 ? ' · ' + eur(p.price * r.amount / w) : '';
+        return '<div class="gap-row" data-id="' + esc(p.id) + '" data-amt="' + r.amount + '">' +
+          '<div class="top"><span>' + esc(p.name || '(no name)') + '</span><span class="pct">' + fmt(r.score * 100, 0) + '%</span></div>' +
+          '<div class="sub">Eat up to <b>' + fmt(Math.floor(r.amount), 0) + ' ' + u + '</b>' + packs + cost +
+          ' → ' + fmt(r.got.kcal, 0) + ' kcal · P ' + fmt(r.got.p) + ' · F ' + fmt(r.got.f) + ' · C ' + fmt(r.got.c) +
+          ' · limit: ' + LIMIT_LABEL[r.limit] + '</div>' +
+          '<div class="meter"><div style="width:' + Math.round(r.score * 100) + '%"></div></div></div>';
+      }).join('');
+  }
+  ['p', 'f', 'c'].forEach(function (k) {
+    $('#g_' + k).addEventListener('input', function (e) { state.gap[k] = MC.num(e.target.value); renderGap(); });
+  });
+  $('#gapFromRem').addEventListener('click', function () {
+    var r = state.remaining;
+    if (r.p == null || r.f == null || r.c == null) { toast('Fill in “Left today” in Settings first'); return; }
+    state.gap = { p: r.p, f: r.f, c: r.c }; loadGapInputs(); renderGap();
+  });
+  $('#gapFocus').addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('button'); if (!b) return;
+    state.ui.gapFocus = b.dataset.f; saveUi(); loadGapInputs(); renderGap();
+  });
+  $('#gapList').addEventListener('click', function (e) {
+    var r = e.target.closest && e.target.closest('.gap-row'); if (r) openProduct(r.dataset.id, Math.floor(parseFloat(r.dataset.amt)));
+  });
+
+  // ---------- tools: compare ----------
+  function renderCompareSelects() {
+    var list = sortedByName();
+    ['cmpA', 'cmpB'].forEach(function (id, idx) {
+      var sel = $('#' + id), want = state.ui[id];
+      if (!want || !state.products[want]) want = list[idx] ? list[idx].id : '';
+      state.ui[id] = want;
+      sel.innerHTML = list.map(function (p) {
+        return '<option value="' + esc(p.id) + '"' + (p.id === want ? ' selected' : '') + '>' + esc(p.name || '(no name)') + '</option>';
+      }).join('');
+    });
+  }
+  function cmpVal(r, v) {
+    if (v == null || !Number.isFinite(v)) return '—';
+    return r.unit === '€' ? eur(v) : fmt(v, r.dec) + (r.unit ? ' ' + r.unit : '');
+  }
+  function renderCompare() {
+    var box = $('#cmpTable'), a = state.products[state.ui.cmpA], b = state.products[state.ui.cmpB];
+    if (Object.keys(state.products).length < 2) { box.innerHTML = '<p class="muted">Add at least two items to compare.</p>'; return; }
+    if (!a || !b || a === b) { box.innerHTML = '<p class="muted">Pick two different items.</p>'; return; }
+    var rows = MC.compare(a, b), wa = 0, wb = 0;
+    rows.forEach(function (r) { if (r.winner === 'a') wa++; if (r.winner === 'b') wb++; });
+    box.innerHTML = '<table><thead><tr><th></th><th>' + esc(a.name || 'A') + '</th><th>' + esc(b.name || 'B') + '</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr><td>' + esc(r.label) + (r.better === 'low' ? '' : '') + '</td>' +
+          '<td class="' + (r.winner === 'a' ? 'win' : '') + '">' + cmpVal(r, r.a) + '</td>' +
+          '<td class="' + (r.winner === 'b' ? 'win' : '') + '">' + cmpVal(r, r.b) + '</td></tr>';
+      }).join('') +
+      '<tr><td><b>Better on</b></td><td><b>' + wa + '</b></td><td><b>' + wb + '</b></td></tr></tbody></table>' +
+      '<p class="muted" style="margin:6px 0 0">Green = better on that line. Lower is better for prices and kcal per 100; higher for everything else. Not every line matters for your goal.</p>';
+  }
+  ['cmpA', 'cmpB'].forEach(function (id) {
+    $('#' + id).addEventListener('change', function (e) { state.ui[id] = e.target.value; saveUi(); renderCompare(); });
+  });
 
   // ---------- settings ----------
   function loadTargets() {

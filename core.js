@@ -174,6 +174,91 @@
     return have.concat(none);
   }
 
+  // ---------- fill my gap ----------
+  // gap = {p, f, c} grams still to eat. focus: 'kcal' | 'p' | 'f' | 'c'.
+  // For each item: the largest amount that overshoots no macro (and no kcal), and how much of the gap that fills.
+  function fillGap(list, gap, focus) {
+    const B = budgetFrom(gap);
+    if (!B) return [];
+    focus = focus || 'kcal';
+    if (!(B[focus] > 0)) return [];
+    const rows = [];
+    list.forEach(function (prod) {
+      if (isIncomplete(prod)) return;
+      const f = fit(prod, 0, gap);
+      if (!f || !(f.maxGrams > 0)) return;
+      const got = scale(prod, f.maxGrams);
+      if (!(got[focus] > 0)) return;
+      rows.push({ prod: prod, amount: f.maxGrams, limit: f.limit, got: got, score: Math.min(1, got[focus] / B[focus]) });
+    });
+    rows.sort(function (a, b) { return b.score - a.score || a.amount - b.amount; });
+    return rows;
+  }
+
+  // ---------- compare two items ----------
+  function compare(a, b) {
+    const ma = metrics(a), mb = metrics(b);
+    return METRICS.filter(function (d) { return !d.text; }).map(function (d) {
+      const va = d.get(ma), vb = d.get(mb);
+      let winner = null;
+      if (va != null && vb != null && Number.isFinite(va) && Number.isFinite(vb)) {
+        const ra = Number(va.toFixed(d.dec)), rb = Number(vb.toFixed(d.dec));
+        winner = ra === rb ? 'tie' : ((d.better === 'high') === (ra > rb) ? 'a' : 'b');
+      }
+      return { key: d.key, label: d.label, unit: d.unit, dec: d.dec, a: va, b: vb, winner: winner };
+    });
+  }
+
+  // ---------- rescan merge ----------
+  // Fields a barcode lookup may fill. Values the user typed (prod.edited[k]) are never replaced.
+  // Items created before edit-tracking existed (no prod.tracked) keep every value they already have.
+  const LOOKUP_FIELDS = ['name', 'brand', 'kcal', 'p', 'f', 'c', 'fiber', 'pack', 'unit'];
+  function isProtected(prod, k) {
+    const has = prod[k] != null && prod[k] !== '';
+    return !!(prod.edited && prod.edited[k]) || (!prod.tracked && has);
+  }
+  function mergeLookup(prod, found) {
+    const out = Object.assign({}, prod), changed = [];
+    LOOKUP_FIELDS.forEach(function (k) {
+      const v = found[k];
+      if (v == null || v === '' || isProtected(prod, k)) return;
+      if (prod[k] !== v) { out[k] = v; changed.push(k); }
+    });
+    if (out.unit === 'ml' && out.edible != null && !(prod.edited && prod.edited.edible)) { out.edible = null; changed.push('edible'); }
+    if (changed.length && out.source !== 'off') out.source = 'off';
+    return { prod: out, changed: changed };
+  }
+
+  // ---------- price history ----------
+  function ensureHistory(prod) {
+    if (!Array.isArray(prod.priceHistory)) prod.priceHistory = [];
+    if (!prod.priceHistory.length && prod.price > 0) {
+      prod.priceHistory.push({ price: prod.price, date: prod.priceDate || '', source: prod.priceSource || '' });
+    }
+    return prod.priceHistory;
+  }
+  // Mutates prod. Adds a history entry only when the price actually changed.
+  function recordPrice(prod, price, date, source) {
+    if (!(price > 0)) return false;
+    const h = Array.isArray(prod.priceHistory) ? prod.priceHistory : (prod.priceHistory = []);
+    const last = h[h.length - 1];
+    prod.price = price; prod.priceDate = date; prod.priceSource = source || '';
+    if (last && Math.abs(last.price - price) < 0.005) return false;
+    h.push({ price: price, date: date, source: source || '' });
+    if (h.length > 30) h.splice(0, h.length - 30);
+    return true;
+  }
+  function priceStats(prod) {
+    const h = Array.isArray(prod.priceHistory) ? prod.priceHistory : [];
+    if (!h.length) return null;
+    const prices = h.map(function (e) { return e.price; });
+    const last = h[h.length - 1], prev = h.length > 1 ? h[h.length - 2] : null;
+    return {
+      count: h.length, lowest: Math.min.apply(null, prices), highest: Math.max.apply(null, prices),
+      last: last.price, changePct: prev ? (last.price - prev.price) / prev.price * 100 : null
+    };
+  }
+
   // ---------- CSV ----------
   function csvCell(v) {
     if (v === null || v === undefined) return '';
@@ -204,7 +289,9 @@
   const api = {
     num: num, dmy: dmy, macroKcal: macroKcal, kcalUsed: kcalUsed, sanity: sanity, isIncomplete: isIncomplete,
     unit: unit, edibleWeight: edibleWeight, metrics: metrics, scale: scale, budgetFrom: budgetFrom, fit: fit,
-    validBarcode: validBarcode, METRICS: METRICS, metricDef: metricDef, sortProducts: sortProducts, toCsv: toCsv
+    validBarcode: validBarcode, METRICS: METRICS, metricDef: metricDef, sortProducts: sortProducts, toCsv: toCsv,
+    fillGap: fillGap, compare: compare, LOOKUP_FIELDS: LOOKUP_FIELDS, isProtected: isProtected, mergeLookup: mergeLookup,
+    ensureHistory: ensureHistory, recordPrice: recordPrice, priceStats: priceStats
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MC = api;
