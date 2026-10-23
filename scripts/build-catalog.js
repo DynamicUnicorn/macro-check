@@ -161,7 +161,11 @@ async function main() {
   }
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify(cat).replace(/\],\[/g, '],\n['));
-  console.log('Wrote ' + out + ' (' + Math.round(fs.statSync(out).size / 1024) + ' KB)');
+  const kb = Math.round(fs.statSync(out).size / 1024);
+  console.log('Wrote ' + out + ' (' + kb + ' KB)');
+  // shows up in the run's annotations (readable via the API)
+  console.log('::notice::Catalogue: ' + cat.total + ' products (AH ' + cat.counts.A + ', Jumbo ' + cat.counts.J + ', Picnic ' + cat.counts.P +
+    '), ' + kb + ' KB. Export lines ' + cat.stats.lines + ', NL ' + cat.stats.nl + ', linked to a shop ' + cat.stats.shop + '.');
 }
 
 module.exports = { transform, addRow, buildFromLines, detectShops, parseQuantity, lineToProduct, COLUMNS };

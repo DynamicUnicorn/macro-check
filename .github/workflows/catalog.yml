@@ -24,10 +24,11 @@ jobs:
       - name: Commit if changed
         id: commit
         run: |
-          if git diff --quiet -- catalog/; then echo "No changes"; echo "changed=no" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git add catalog/catalog.json
+          # compare staged content (also catches the very first, untracked catalogue)
+          if git diff --cached --quiet -- catalog/; then echo "No changes"; echo "changed=no" >> "$GITHUB_OUTPUT"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add catalog/catalog.json
           git commit -m "Catalogue refresh $(date -u +%d/%m/%Y)"
           git pull --rebase origin main
           git push origin HEAD:main
