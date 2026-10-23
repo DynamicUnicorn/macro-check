@@ -158,7 +158,7 @@ Both databases are crowd-sourced: always glance at the label. If a product isn't
 | `scripts/build-catalog.js` | Builds the catalogue from Open Food Facts (no dependencies). |
 | `catalog/catalog.json` | The catalogue itself, written by the weekly workflow. Don't edit by hand. |
 | `.github/workflows/catalog.yml` | Weekly/on-demand catalogue build; commits the result and republishes the site. |
-| `tests/catalog.js` | Tests for the catalogue builder, against a fake Open Food Facts API. |
+| `tests/catalog.js` | Tests for the catalogue builder, against a fake Open Food Facts export. |
 | `CLAUDE.md` | Project conventions for Claude when working on this repo in a new session. |
 | `README.md` | This document. |
 
@@ -188,7 +188,7 @@ npm test         # runs both test suites
 ```
 
 - `npm run test:unit`: hand-calculated checks for parsing (comma decimals), scaling, every metric, the budget fit and max amount, liquids, price per kg/litre, sorting (including A–Z), aliases and search, Fill my gap, Compare, the sync price-merge rules, the rescan merge rules (edited fields kept), price history, CSV output and barcode checksums. All test products are synthetic examples, not real label data.
-- `npm run test:catalog`: the catalogue builder's filtering rules (missing or impossible macros, kJ conversion, liquids, shop merging) and a full run against a fake API, including paging, rate-limit waits and a retried 429.
+- `npm run test:catalog`: the catalogue builder's rules (shop detection from stores and brands, pack-size parsing, missing or impossible macros, kJ conversion, liquids, shop merging, Netherlands-only) and a full build from a fake export.
 - `npm run test:ui`: loads the app in a simulated browser and checks targets, manual entry, barcode lookup (mocked), crowd prices, layout order, liquids, servings, price history, the library and its sorting, aliases, the picker, Fill my gap, Compare, a full rescan, GitHub sync (against a mocked GitHub API), and the catalogue: filters, search, preview/save/close, Fill my gap over the catalogue, and the offline barcode fallback. It doesn't cover the camera, the flashlight or real network calls.
 
 GitHub also runs `npm test` on every push (the **Actions** tab). A red cross on a commit means a test failed.
@@ -212,13 +212,13 @@ With Claude: open the same chat on any device, or start a new one and ask Claude
 
 `catalog/catalog.json` is built by `scripts/build-catalog.js`, running on GitHub Actions (`.github/workflows/catalog.yml`):
 - **When:** every Monday at 03:23 UTC, or on demand (GitHub → Actions → *catalogue* → *Run workflow*).
-- **What:** the Open Food Facts search API, Netherlands only, products tagged with the **store** or **brand** Albert Heijn/AH, Jumbo or Picnic. A product found under several shops gets all of them.
+- **What:** Open Food Facts' official **nightly export** (about 0.9 GB compressed), streamed and filtered on GitHub's machine. Open Food Facts asks bulk users to use this rather than page through the API, which gets blocked. It keeps products sold in the Netherlands whose **stores** field mentions Albert Heijn/AH, Jumbo or Picnic, or whose **brand** is AH (including AH Excellent, AH Terra and other sub-brands), Jumbo or Picnic. A product linked to several shops gets all of them.
 - **Kept:** products with protein, fat and carbs per 100 g/ml. kcal comes from the label, else kJ ÷ 4.184, else 4/4/9. Products with impossible values (P+F+C over 105 g, kcal over 950, negative values) or no name are dropped.
-- **Stored per product:** barcode, name (Dutch where available), brand, shops, pack size, g/ml, kcal, protein, fat, carbs, fibre, sugar.
-- **Safety:** the job refuses to replace the catalogue with one less than 60 % of the previous size (an API outage shouldn't wipe it), and it respects the 10-searches-a-minute limit, so a full build takes a while.
+- **Stored per product:** barcode, name, brand, shops, pack size (parsed from text like "500 g", "1,5 l" or "6 x 0,33 l"), g/ml, kcal, protein, fat, carbs, fibre, sugar.
+- **Safety:** the job refuses to replace the catalogue with one less than 60 % of the previous size (a bad export shouldn't wipe it), and stops with a clear error if the export's columns change.
 - The app downloads the file the first time you open the Catalogue (or a catalogue search in Fill my gap) and then keeps it for offline use. If Open Food Facts is unreachable when you scan, the barcode is looked up in the catalogue instead.
 
-**How complete is it?** Only as complete as Open Food Facts: products that someone has added and tagged with one of these shops. Store tags are often missing, so some products sold at a shop won't show up under it. New or corrected products appear in the Open Food Facts API **immediately** after they're saved, so they reach the catalogue at the next weekly build. Products you add through **MacroFactor's food submission** (with the consent slider on) are sent to Open Food Facts, so they flow in too, but MacroFactor doesn't say how quickly it forwards them.
+**How complete is it?** Only as complete as Open Food Facts: products that someone has added and tagged with one of these shops. Store tags are often missing, so some products sold at a shop won't show up under it. New or corrected products appear in the Open Food Facts API **immediately** after they're saved and in the nightly export the next day, so they reach the catalogue at the next weekly build. Products you add through **MacroFactor's food submission** (with the consent slider on) are sent to Open Food Facts, so they flow in too, but MacroFactor doesn't say how quickly it forwards them.
 
 **Licence:** the catalogue is a derived database of Open Food Facts, available under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/). Data © Open Food Facts contributors. Keep this attribution if you reuse it.
 

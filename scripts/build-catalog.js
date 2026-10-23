@@ -1,28 +1,45 @@
 #!/usr/bin/env node
 /*
  * Builds catalog/catalog.json: products sold at Albert Heijn, Jumbo and Picnic (Netherlands)
- * with complete macros, from the Open Food Facts search API.
+ * with complete macros, from Open Food Facts.
  * Runs on GitHub Actions (weekly + on demand). No dependencies; Node 20+.
  * Data: Open Food Facts contributors, Open Database License (ODbL) — https://world.openfoodfacts.org
  *
- * Usage: node scripts/build-catalog.js [--out catalog/catalog.json] [--max-pages N]
+ * Source: the official nightly CSV export (Open Food Facts asks bulk users not to page through the API).
+ * Usage: node scripts/build-catalog.js [--out catalog/catalog.json] [--from <url or local .csv/.csv.gz>]
  */
 'use strict';
 const fs = require('fs');
 const path = require('path');
 
 const UA = 'MacroCheck/1.0 (personal nutrition web app; github.com/DynamicUnicorn/macro-check)';
-const API = 'https://world.openfoodfacts.org/api/v2/search';
-const FIELDS = ['code', 'product_name', 'product_name_nl', 'brands', 'quantity', 'product_quantity',
-  'product_quantity_unit', 'nutriments', 'stores_tags', 'brands_tags', 'countries_tags'].join(',');
-const PAGE_SIZE = 100;          // API maximum
-const DELAY_MS = 6500;          // search API limit is 10 requests/minute
-const SHOPS = {
-  A: { name: 'Albert Heijn', queries: [{ stores_tags: 'albert-heijn' }, { brands_tags: 'ah' }, { brands_tags: 'albert-heijn' }] },
-  J: { name: 'Jumbo', queries: [{ stores_tags: 'jumbo' }, { brands_tags: 'jumbo' }] },
-  P: { name: 'Picnic', queries: [{ stores_tags: 'picnic' }, { brands_tags: 'picnic' }] }
-};
+// Official nightly export (tab-separated, gzipped, ~0.9 GB). Open Food Facts asks bulk users to use this, not the API.
+const EXPORT_URL = 'https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz';
 const COLUMNS = ['code', 'name', 'brand', 'shops', 'pack', 'unit', 'kcal', 'p', 'f', 'c', 'fiber', 'sugar'];
+const SHOP_NAMES = { A: 'Albert Heijn', J: 'Jumbo', P: 'Picnic' };
+
+// Which of our shops a product is linked to, from the free-text "stores" field and the brand tags.
+function detectShops(stores, brandsTags) {
+  const st = ',' + String(stores || '').toLowerCase().replace(/\s*,\s*/g, ',') + ',';
+  const bt = String(brandsTags || '').toLowerCase().split(',').map((t) => t.trim().replace(/^[a-z]{2}:/, ''));
+  const hasBrand = (re) => bt.some((t) => re.test(t));
+  let out = '';
+  if (/albert[\s-]*heijn/.test(st) || /,\s*ah\s*,/.test(st) || hasBrand(/^(ah|albert-heijn)(-|$)/)) out += 'A';
+  if (/jumbo/.test(st) || hasBrand(/^jumbo(-|$)/)) out += 'J';
+  if (/picnic/.test(st) || hasBrand(/^picnic(-|$)/)) out += 'P';
+  return out;
+}
+
+// "500 g", "1,5 l", "6 x 0,33 l", "2x250ml" -> { pack, unit }
+function parseQuantity(q) {
+  const s = String(q || '').toLowerCase().replace(/,/g, '.');
+  const mult = { kg: 1000, g: 1, mg: 0.001, l: 1000, cl: 10, dl: 100, ml: 1 };
+  let m = /(\d+)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(kg|g|mg|l|cl|dl|ml)\b/.exec(s);
+  if (m) return { pack: +m[1] * +m[2] * mult[m[3]], unit: /l$/.test(m[3]) ? 'ml' : 'g' };
+  m = /(\d+(?:\.\d+)?)\s*(kg|g|mg|l|cl|dl|ml)\b/.exec(s);
+  if (m) return { pack: +m[1] * mult[m[2]], unit: /l$/.test(m[2]) ? 'ml' : 'g' };
+  return { pack: null, unit: null };
+}
 
 function num(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -45,9 +62,10 @@ function transform(prod, shopLetter) {
   const name = String(prod.product_name_nl || prod.product_name || '').trim().replace(/\s+/g, ' ');
   if (!name) return null;
   const brand = String(prod.brands || '').split(',')[0].trim();
-  const qu = String(prod.product_quantity_unit || '').toLowerCase();
-  const unit = /^(ml|cl|l)$/.test(qu) || (!qu && /\d\s*(ml|cl|l)\b/i.test(prod.quantity || '')) ? 'ml' : 'g';
+  const qu = String(prod.product_quantity_unit || '').toLowerCase(), pq = parseQuantity(prod.quantity);
+  const unit = /^(ml|cl|l)$/.test(qu) || (!qu && pq.unit === 'ml') ? 'ml' : 'g';
   let pack = num(prod.product_quantity);
+  if (pack == null) pack = pq.pack;
   if (pack != null && (pack <= 0 || pack > 20000)) pack = null;
   const fiber = num(n.fiber_100g), sugar = num(n.sugars_100g);
   return [String(prod.code), name.slice(0, 120), brand.slice(0, 60), shopLetter, r1(pack), unit,
@@ -63,71 +81,82 @@ function addRow(map, row) {
   if (prev[4] == null && row[4] != null) prev[4] = row[4];
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function fetchJson(url, fetchFn, log, wait) {
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    try {
-      const res = await fetchFn(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
-      if (res.status === 429 || res.status >= 500) throw new Error('HTTP ' + res.status);
-      if (!res.ok) throw new Error('HTTP ' + res.status + ' (not retried)');
-      return await res.json();
-    } catch (e) {
-      if (/not retried/.test(e.message) || attempt === 4) throw e;
-      log('  retry ' + attempt + ' after error: ' + e.message);
-      await wait(60000 * attempt);
-    }
-  }
+// One tab-separated export line -> API-like product object (only the fields we use), or null.
+function lineToProduct(cols, ix) {
+  const g = (k) => (ix[k] == null ? '' : cols[ix[k]] || '');
+  const n = {};
+  ['energy-kcal_100g', 'energy_100g', 'proteins_100g', 'fat_100g', 'carbohydrates_100g', 'fiber_100g', 'sugars_100g']
+    .forEach((k) => { if (g(k) !== '') n[k] = g(k); });
+  return {
+    code: g('code'), product_name: g('product_name'), product_name_nl: g('product_name_nl'), brands: g('brands'),
+    quantity: g('quantity'), product_quantity: g('product_quantity'), product_quantity_unit: g('product_quantity_unit'),
+    nutriments: n
+  };
 }
 
-async function buildCatalog(opts) {
-  const fetchFn = opts.fetch || fetch, log = opts.log || console.log;
-  const wait = opts.wait || sleep, delay = opts.delay == null ? DELAY_MS : opts.delay;
-  const maxPages = opts.maxPages || 400;
-  const map = new Map(), stats = {};
-  let first = true;
-  for (const [letter, shop] of Object.entries(SHOPS)) {
-    stats[letter] = { seen: 0, kept: 0 };
-    for (const q of shop.queries) {
-      for (let page = 1; page <= maxPages; page++) {
-        const params = new URLSearchParams(Object.assign({}, q, {
-          countries_tags: 'en:netherlands', fields: FIELDS, page_size: String(PAGE_SIZE), page: String(page)
-        }));
-        if (!first) await wait(delay);
-        first = false;
-        const data = await fetchJson(API + '?' + params, fetchFn, log, wait);
-        const prods = (data && data.products) || [];
-        stats[letter].seen += prods.length;
-        for (const pr of prods) { const row = transform(pr, letter); if (row) { addRow(map, row); stats[letter].kept++; } }
-        const total = num(data && data.count) || 0;
-        log(shop.name + ' ' + JSON.stringify(q) + ' page ' + page + ': ' + prods.length + ' products (of ' + total + ')');
-        if (prods.length < PAGE_SIZE || page * PAGE_SIZE >= total) break;
+// lines: async iterable of export lines (first line = header).
+async function buildFromLines(lines, opts) {
+  const log = (opts && opts.log) || console.log;
+  const map = new Map(), stats = { lines: 0, nl: 0, shop: 0, kept: 0 };
+  let ix = null;
+  for await (const line of lines) {
+    if (!ix) {
+      ix = {}; line.split('\t').forEach((h, i) => { ix[h.trim()] = i; });
+      for (const need of ['code', 'countries_tags', 'proteins_100g', 'fat_100g', 'carbohydrates_100g']) {
+        if (ix[need] == null) throw new Error('Export format changed: column "' + need + '" missing');
       }
+      continue;
     }
+    stats.lines++;
+    if (stats.lines % 500000 === 0) log('  ' + stats.lines + ' lines, ' + map.size + ' kept');
+    if (line.indexOf('en:netherlands') < 0) continue;            // cheap pre-filter before splitting
+    const cols = line.split('\t');
+    if ((',' + (cols[ix.countries_tags] || '') + ',').indexOf(',en:netherlands,') < 0) continue;
+    stats.nl++;
+    const shops = detectShops(ix.stores == null ? '' : cols[ix.stores], ix.brands_tags == null ? '' : cols[ix.brands_tags]);
+    if (!shops) continue;
+    stats.shop++;
+    const row = transform(lineToProduct(cols, ix), shops);
+    if (row) { addRow(map, row); stats.kept++; }
   }
+  if (!ix) throw new Error('Export was empty');
   const rows = Array.from(map.values()).sort((a, b) => a[1].localeCompare(b[1], 'nl'));
   const counts = { A: 0, J: 0, P: 0 };
-  rows.forEach((r) => r[3].split('').forEach((s) => counts[s]++));
+  rows.forEach((r) => r[3].split('').forEach((x) => counts[x]++));
   return {
     app: 'macro-check', format: 1, generated: new Date().toISOString(),
-    source: 'Open Food Facts (world.openfoodfacts.org), products tagged Albert Heijn / Jumbo / Picnic in the Netherlands',
+    source: 'Open Food Facts nightly export (static.openfoodfacts.org), products in the Netherlands linked to Albert Heijn / Jumbo / Picnic by store or brand',
     license: 'Open Database License (ODbL) — data from Open Food Facts contributors',
-    shops: { A: 'Albert Heijn', J: 'Jumbo', P: 'Picnic' }, counts: counts, total: rows.length,
-    columns: COLUMNS, rows: rows, stats: stats
+    shops: SHOP_NAMES, counts: counts, total: rows.length, columns: COLUMNS, rows: rows, stats: stats
   };
+}
+
+async function* exportLines(url) {
+  const { Readable } = require('stream');
+  const zlib = require('zlib');
+  const readline = require('readline');
+  const res = await fetch(url, { headers: { 'User-Agent': UA } });
+  if (!res.ok) throw new Error('Download failed: HTTP ' + res.status);
+  const body = Readable.fromWeb(res.body).pipe(zlib.createGunzip());
+  yield* readline.createInterface({ input: body, crlfDelay: Infinity });
 }
 
 async function main() {
   const args = process.argv.slice(2);
   const get = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
   const out = path.resolve(get('--out', path.join(__dirname, '..', 'catalog', 'catalog.json')));
-  const cat = await buildCatalog({ maxPages: +get('--max-pages', 400) });
+  const src = get('--from', EXPORT_URL);
+  console.log('Reading ' + src);
+  const lines = /^https?:/.test(src) ? exportLines(src)
+    : require('readline').createInterface({ input: fs.createReadStream(src).pipe(/\.gz$/.test(src) ? require('zlib').createGunzip() : new (require('stream').PassThrough)()), crlfDelay: Infinity });
+  const cat = await buildFromLines(lines);
+  console.log('Stats: ' + JSON.stringify(cat.stats));
   console.log('Total kept: ' + cat.total + ' ' + JSON.stringify(cat.counts));
   // Safety: never replace a good catalogue with a tiny one after an API hiccup.
   let prev = 0;
   try { prev = JSON.parse(fs.readFileSync(out, 'utf8')).total || 0; } catch (e) { /* first run */ }
   if (cat.total < 200 || (prev && cat.total < prev * 0.6)) {
-    console.error('Refusing to write: only ' + cat.total + ' products (previous ' + prev + ').');
+    console.error('::error::Refusing to write: only ' + cat.total + ' products (previous ' + prev + ').');
     process.exit(2);
   }
   fs.mkdirSync(path.dirname(out), { recursive: true });
@@ -135,5 +164,5 @@ async function main() {
   console.log('Wrote ' + out + ' (' + Math.round(fs.statSync(out).size / 1024) + ' KB)');
 }
 
-module.exports = { transform, addRow, buildCatalog, COLUMNS, SHOPS };
-if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
+module.exports = { transform, addRow, buildFromLines, detectShops, parseQuantity, lineToProduct, COLUMNS };
+if (require.main === module) main().catch((e) => { console.error('::error::' + (e && e.message || e)); console.error(e); process.exit(1); });

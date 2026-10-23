@@ -1,5 +1,5 @@
-// Run: npm test  (or: node tests/catalog.js) — tests the catalogue builder with a fake Open Food Facts API.
-const { transform, addRow, buildCatalog, COLUMNS } = require('../scripts/build-catalog.js');
+// Run: npm test  (or: node tests/catalog.js) — tests the catalogue builder with a fake Open Food Facts export.
+const { transform, addRow, buildFromLines, detectShops, parseQuantity, COLUMNS } = require('../scripts/build-catalog.js');
 let fails = 0;
 function eq(name, got, want) {
   const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -25,34 +25,51 @@ const m = new Map();
 addRow(m, transform(quark, 'P')); addRow(m, transform(quark, 'A'));
 eq('shops merged and ordered', m.get('8719587412480')[3], 'AP');
 
-// fake API: AH store query has 150 products over 2 pages; brand query repeats some; Jumbo 1; Picnic 0; one 429.
-let calls = 0, threw = false;
-const fakeFetch = async (url) => {
-  calls++;
-  const u = new URL(url), q = u.searchParams, page = +q.get('page');
-  if (q.get('countries_tags') !== 'en:netherlands') throw new Error('country filter missing');
-  if (q.get('stores_tags') === 'jumbo' && !threw) { threw = true; return { ok: false, status: 429 }; }
-  let prods = [];
-  if (q.get('stores_tags') === 'albert-heijn') {
-    const start = (page - 1) * 100, n = page === 1 ? 100 : 50;
-    prods = Array.from({ length: n }, (_, i) => ({ code: String(10000000 + start + i), product_name: 'AH item ' + (start + i), nutriments: N(5, 5, 5) }));
-    return { ok: true, status: 200, json: async () => ({ count: 150, products: prods }) };
-  }
-  if (q.get('brands_tags') === 'ah') prods = [{ code: '10000000', product_name: 'AH item 0', nutriments: N(5, 5, 5) }, { code: '99999999', product_name: 'bad', nutriments: {} }];
-  if (q.get('stores_tags') === 'jumbo') prods = [{ code: '10000001', product_name: 'AH item 1', nutriments: N(5, 5, 5) }, { code: '20000000', product_name: 'Jumbo penne', nutriments: N(12, 1.5, 70) }];
-  return { ok: true, status: 200, json: async () => ({ count: prods.length, products: prods }) };
-};
+// ---- shop detection & quantities ----
+eq('AH by store text', detectShops('Albert Heijn, Lidl', ''), 'A');
+eq('AH by short store', detectShops('AH', ''), 'A');
+eq('AH store word not matched inside other words', detectShops('Aholdhouse,Spar', ''), '');
+eq('AH by brand tag', detectShops('', 'ah,albert-heijn'), 'A');
+eq('AH sub-brand tag', detectShops('', 'ah-excellent'), 'A');
+eq('brand tag with language prefix', detectShops('', 'xx:ah'), 'A');
+eq('Jumbo + Picnic', detectShops('Jumbo,Picnic', ''), 'JP');
+eq('Picnic brand', detectShops('', 'picnic'), 'P');
+eq('no match', detectShops('Lidl, Aldi', 'milbona'), '');
+eq('qty grams', parseQuantity('500 g'), { pack: 500, unit: 'g' });
+eq('qty kg comma', parseQuantity('1,5 kg'), { pack: 1500, unit: 'g' });
+eq('qty litre', parseQuantity('1,5 l'), { pack: 1500, unit: 'ml' });
+eq('qty cl', parseQuantity('33cl'), { pack: 330, unit: 'ml' });
+eq('qty multipack', parseQuantity('6 x 0,33 l'), { pack: 1980, unit: 'ml' });
+eq('qty none', parseQuantity('1 stuk'), { pack: null, unit: null });
+eq('pack from text in transform', transform({ code: '12345678', product_name: 'x', quantity: '250 g', nutriments: N(1, 1, 1) }, 'A')[4], 250);
+
+// ---- full build from a fake export ----
+const H = ['code', 'product_name', 'brands', 'brands_tags', 'stores', 'countries_tags', 'quantity',
+  'energy-kcal_100g', 'energy_100g', 'proteins_100g', 'fat_100g', 'carbohydrates_100g', 'fiber_100g', 'sugars_100g'];
+const L = (o) => H.map((h) => (o[h] == null ? '' : String(o[h]))).join('\t');
+const lines = [H.join('\t'),
+  L({ code: '10000000', product_name: 'Magere kwark', brands: 'AH', brands_tags: 'ah', stores: '', countries_tags: 'en:netherlands', quantity: '500 g', 'energy-kcal_100g': 57, proteins_100g: 10, fat_100g: 0.2, carbohydrates_100g: 3.8 }),
+  L({ code: '10000001', product_name: 'Penne', brands: 'Jumbo', brands_tags: 'jumbo', stores: 'Jumbo, Albert Heijn', countries_tags: 'en:belgium,en:netherlands', quantity: '500 g', proteins_100g: 12, fat_100g: 1.5, carbohydrates_100g: 70 }),
+  L({ code: '10000002', product_name: 'Belgian only', brands: 'AH', brands_tags: 'ah', countries_tags: 'en:belgium', proteins_100g: 1, fat_100g: 1, carbohydrates_100g: 1 }),
+  L({ code: '10000003', product_name: 'Lidl thing', stores: 'Lidl', countries_tags: 'en:netherlands', proteins_100g: 1, fat_100g: 1, carbohydrates_100g: 1 }),
+  L({ code: '10000004', product_name: 'No macros', stores: 'Picnic', countries_tags: 'en:netherlands', proteins_100g: 1 }),
+  L({ code: '10000005', product_name: 'Halfvolle melk', brands: 'Picnic', brands_tags: 'picnic', stores: 'Picnic', countries_tags: 'en:netherlands', quantity: '1 l', proteins_100g: 3.5, fat_100g: 1.5, carbohydrates_100g: 4.7 }),
+  L({ code: '10000000', product_name: 'Magere kwark dup', stores: 'Picnic', countries_tags: 'en:netherlands', proteins_100g: 10, fat_100g: 0.2, carbohydrates_100g: 3.8 })
+];
+async function* gen(arr) { for (const l of arr) yield l; }
 (async () => {
-  const waits = [];
-  const cat = await buildCatalog({ fetch: fakeFetch, log: () => {}, wait: async (ms) => { waits.push(ms); }, delay: 6500 });
-  eq('total deduped', cat.total, 151);
-  eq('counts per shop', cat.counts, { A: 150, J: 2, P: 0 });
-  eq('shared product has both shops', cat.rows.find((r) => r[0] === '10000001')[3], 'AJ');
-  eq('paging stopped at count', calls, 9); // AH store 2 pages + ah brand + albert-heijn brand + jumbo store (429, retry) + jumbo brand + picnic store + picnic brand
-  eq('rate-limit delay used', waits.filter((w) => w === 6500).length, 7); // 8 page requests, no delay before the first
-  eq('429 waited before retry', waits.includes(60000), true);
-  eq('sorted by name', cat.rows[0][1] <= cat.rows[1][1], true);
+  const cat = await buildFromLines(gen(lines), { log: () => {} });
+  eq('kept NL + shop + complete macros', cat.rows.map((r) => r[0]).sort(), ['10000000', '10000001', '10000005']);
+  eq('counts per shop', cat.counts, { A: 2, J: 1, P: 2 });
+  eq('duplicate barcode merges shops', cat.rows.find((r) => r[0] === '10000000')[3], 'AP');
+  eq('first entry data kept', cat.rows.find((r) => r[0] === '10000000')[1], 'Magere kwark');
+  eq('kcal computed when missing', cat.rows.find((r) => r[0] === '10000001')[6], Math.round(4 * 12 + 9 * 1.5 + 4 * 70));
+  eq('liquid from quantity text', cat.rows.find((r) => r[0] === '10000005').slice(4, 6), [1000, 'ml']);
+  eq('stats', cat.stats, { lines: 7, nl: 6, shop: 5, kept: 4 }); // NL: all but the Belgian one; shop: all NL but Lidl; kept: minus 'No macros'
   eq('attribution present', /Open Food Facts/.test(cat.source) && /ODbL/.test(cat.license), true);
+  let err = '';
+  try { await buildFromLines(gen(['code\tproduct_name']), { log: () => {} }); } catch (e) { err = e.message; }
+  eq('format change detected', /column "countries_tags" missing/.test(err), true);
   console.log(fails ? fails + ' FAILED' : 'CATALOG ALL PASSED');
   process.exit(fails ? 1 : 0);
 })();
