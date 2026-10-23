@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Macro Check</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #16a34a; --accent-ink: #ffffff; --bad: #dc2626; --warn: #d97706; --ok: #16a34a;
+    --chip: #eef2f7; --bar: #bbf7d0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0f17; --card: #151b27; --text: #e5e7eb; --muted: #9ca3af; --line: #263041;
+      --accent: #22c55e; --accent-ink: #052e16; --bad: #f87171; --warn: #fbbf24; --ok: #4ade80;
+      --chip: #1f2937; --bar: #14532d;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
+  body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  main { max-width: 640px; margin: 0 auto; padding: 12px 12px 24px; }
+  h1 { font-size: 1.1rem; margin: 4px 0 10px; }
+  h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 0 6px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 12px; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .sub { color: var(--muted); font-size: .85rem; margin-top: 2px; word-break: break-word; }
+  input, select, button { font: inherit; color: inherit; }
+  input[type=text], select {
+    width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); min-height: 44px; font-size: 16px;
+  }
+  input.name { font-weight: 600; }
+  label.f { display: block; font-size: .75rem; color: var(--muted); }
+  label.f input { margin-top: 3px; }
+  .grid5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  @media (max-width: 420px) { .grid5 { grid-template-columns: repeat(3, 1fr); } }
+  button { cursor: pointer; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 10px 14px; min-height: 44px; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 700; }
+  button.danger { color: var(--bad); }
+  button.small { min-height: 36px; padding: 6px 10px; font-size: .9rem; }
+  .row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row-actions > * { flex: 1 1 auto; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+  .chip { background: var(--chip); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; min-height: 36px; font-size: .9rem; }
+  .chip.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  .notice { border-radius: 10px; padding: 8px 10px; margin: 8px 0; font-size: .9rem; border: 1px solid var(--warn); color: var(--warn); }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .tile { background: var(--chip); border-radius: 10px; padding: 8px 4px; text-align: center; }
+  .tile b { display: block; font-size: 1.15rem; }
+  .tile span { font-size: .72rem; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { padding: 6px 4px; text-align: right; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th:first-child, td:first-child { text-align: left; color: var(--muted); }
+  th { font-size: .75rem; font-weight: 600; color: var(--muted); }
+  td small { display: block; color: var(--muted); font-size: .72rem; }
+  .hl { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .neg { color: var(--bad); font-weight: 700; }
+  .warnc { color: var(--warn); font-weight: 700; }
+  .okc { color: var(--ok); font-weight: 700; }
+  .kv { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: .92rem; }
+  .kv:last-child { border-bottom: 0; }
+  .kv span:first-child { color: var(--muted); }
+  details.card > summary { cursor: pointer; font-weight: 600; min-height: 28px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; min-height: 34px; padding: 4px 10px; font-size: .85rem; background: var(--chip); }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .lib-row { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; padding: 10px 4px;
+    border-bottom: 1px solid var(--line); position: relative; cursor: pointer; }
+  .lib-row .rank { color: var(--muted); font-size: .8rem; text-align: center; }
+  .lib-row .nm { font-weight: 600; word-break: break-word; }
+  .lib-row .val { font-weight: 800; font-size: 1.05rem; text-align: right; white-space: nowrap; }
+  .lib-row .val small { font-weight: 400; color: var(--muted); }
+  .lib-row .bar { grid-column: 2 / 4; height: 6px; background: var(--bar); border-radius: 3px; }
+  nav { position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--card); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+  nav button { flex: 1; border: 0; border-radius: 0; background: transparent; min-height: 58px; font-size: .8rem; color: var(--muted); }
+  nav button.on { color: var(--accent); font-weight: 700; }
+  nav button b { display: block; font-size: 1.2rem; }
+  #scanner { position: fixed; inset: 0; background: #000; z-index: 20; display: flex; flex-direction: column; }
+  #scanner[hidden] { display: none; }
+  #scanner video { flex: 1; width: 100%; object-fit: cover; min-height: 0; }
+  #scanner .bar { padding: 12px; color: #fff; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+  #scanner .frame { position: absolute; left: 10%; right: 10%; top: 30%; height: 22%; border: 2px solid rgba(255,255,255,.85); border-radius: 12px; pointer-events: none; }
+  #toast { position: fixed; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom)); background: #111827; color: #fff;
+    padding: 10px 14px; border-radius: 12px; z-index: 30; display: none; text-align: center; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <section id="tab-scan">
+    <h1>Macro Check</h1>
+    <div class="card">
+      <div class="row-actions">
+        <button class="primary" id="btnScan">📷 Scan barcode</button>
+        <button id="btnManual">＋ Manual item</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input type="text" id="barcodeInput" inputmode="numeric" placeholder="…or type a barcode" autocomplete="off">
+        <button id="btnLookup">Look up</button>
+      </div>
+    </div>
+
+    <details class="card" id="remBox">
+      <summary>Left today (from MacroFactor) <span class="muted" id="remSummary"></span></summary>
+      <p class="muted" style="margin:8px 0">Optional. Copy the three “remaining” numbers; calories are worked out for you.</p>
+      <div class="grid4">
+        <label class="f">Protein g<input type="text" inputmode="decimal" id="r_p" autocomplete="off"></label>
+        <label class="f">Fat g<input type="text" inputmode="decimal" id="r_f" autocomplete="off"></label>
+        <label class="f">Carbs g<input type="text" inputmode="decimal" id="r_c" autocomplete="off"></label>
+        <label class="f">kcal<input type="text" id="r_kcal" disabled></label>
+      </div>
+      <div id="remNote" class="muted" style="margin-top:6px"></div>
+      <div class="row-actions" style="margin-top:8px"><button class="small" id="remClear">Clear</button></div>
+    </details>
+
+    <div id="item"></div>
+    <div id="results"></div>
+  </section>
+
+  <section id="tab-lib" hidden>
+    <h1>Library</h1>
+    <div class="card">
+      <div class="chips" id="quick"></div>
+      <div style="display:flex;gap:8px">
+        <select id="sortSel" aria-label="Sort by"></select>
+        <button id="dirBtn" class="small" style="min-width:92px"></button>
+      </div>
+      <input type="text" id="search" placeholder="Filter by name…" style="margin-top:8px" autocomplete="off">
+    </div>
+    <div class="card" id="libList"></div>
+  </section>
+
+  <section id="tab-set" hidden>
+    <h1>Settings</h1>
+    <div class="card">
+      <h3 style="margin-top:0">Training day targets</h3>
+      <div class="grid4">
+        <label class="f">Protein g<input type="text" inputmode="decimal" id="t_train_p" autocomplete="off"></label>
+        <label class="f">Fat g<input type="text" inputmode="decimal" id="t_train_f" autocomplete="off"></label>
+        <label class="f">Carbs g<input type="text" inputmode="decimal" id="t_train_c" autocomplete="off"></label>
+        <label class="f">kcal<input type="text" id="t_train_kcal" disabled></label>
+      </div>
+      <h3>Rest day targets</h3>
+      <div class="grid4">
+        <label class="f">Protein g<input type="text" inputmode="decimal" id="t_rest_p" autocomplete="off"></label>
+        <label class="f">Fat g<input type="text" inputmode="decimal" id="t_rest_f" autocomplete="off"></label>
+        <label class="f">Carbs g<input type="text" inputmode="decimal" id="t_rest_c" autocomplete="off"></label>
+        <label class="f">kcal<input type="text" id="t_rest_kcal" disabled></label>
+      </div>
+      <p class="muted">Calories = 4×protein + 4×carbs + 9×fat. Saved on this phone; change them whenever your targets change.</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Your data</h3>
+      <div class="row-actions">
+        <button id="expCsv">Export CSV</button>
+        <button id="expJson">Backup (JSON)</button>
+        <button id="impJson">Restore backup</button>
+      </div>
+      <input type="file" id="impFile" accept="application/json,.json" hidden>
+      <p class="muted">Everything lives in this browser’s storage. Clearing site data deletes it, so make a backup now and then.</p>
+      <div class="row-actions"><button class="danger small" id="wipe">Delete all items</button></div>
+    </div>
+    <div class="card muted">
+      Product data comes from <b>Open Food Facts</b> (crowd-sourced, so check the numbers against the label).
+      Only the barcode you scan is sent to them. Macro Check v1.0
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button data-tab="scan" class="on"><b>📷</b>Scan</button>
+  <button data-tab="lib"><b>📋</b>Library</button>
+  <button data-tab="set"><b>⚙️</b>Settings</button>
+</nav>
+
+<div id="scanner" hidden>
+  <video id="video" playsinline muted></video>
+  <div class="frame"></div>
+  <div class="bar"><span id="scanStatus">…</span><button id="scanClose">Close</button></div>
+</div>
+<div id="toast"></div>
+
+<script src="core.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+  var fmt = function (n, d) {
+    if (n == null || !Number.isFinite(n)) return '—';
+    return String(Number(n.toFixed(d == null ? 1 : d)));
+  };
+  var eur = function (n) { return n == null || !Number.isFinite(n) ? '—' : '€' + n.toFixed(2); };
+  var LIMIT_LABEL = { kcal: 'calories', p: 'protein', f: 'fat', c: 'carbs' };
+
+  // ---------- storage ----------
+  var store = {
+    get: function (k, def) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } },
+    set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast('Could not save (storage blocked or full)'); } }
+  };
+  var state = {
+    products: store.get('mc.products', {}),
+    targets: store.get('mc.targets', { train: { p: null, f: null, c: null }, rest: { p: null, f: null, c: null } }),
+    remaining: store.get('mc.remaining', { p: null, f: null, c: null, date: '' }),
+    ui: store.get('mc.ui', { sort: 'pPer100kcal', dir: 'best', day: 'train' }),
+    currentId: null, amount: null
+  };
+  function saveProducts() { store.set('mc.products', state.products); }
+  function saveTargets() { store.set('mc.targets', state.targets); }
+  function saveRemaining() { store.set('mc.remaining', state.remaining); }
+  function saveUi() { store.set('mc.ui', state.ui); }
+
+  var toastTimer;
+  function toast(msg) {
+    var t = $('#toast'); t.textContent = msg; t.style.display = 'block';
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.style.display = 'none'; }, 3500);
+  }
+
+  function newProduct(o) {
+    return Object.assign({
+      id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      name: '', brand: '', barcode: '', kcal: null, p: null, f: null, c: null, fiber: null,
+      pack: null, edible: null, price: null, priceDate: '', source: 'manual', added: MC.dmy()
+    }, o || {});
+  }
+  function cur() { return state.currentId ? state.products[state.currentId] : null; }
+
+  // ---------- tabs ----------
+  function showTab(name) {
+    ['scan', 'lib', 'set'].forEach(function (t) { $('#tab-' + t).hidden = t !== name; });
+    document.querySelectorAll('nav button').forEach(function (b) { b.classList.toggle('on', b.dataset.tab === name); });
+    if (name === 'lib') renderLib();
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll('nav button').forEach(function (b) {
+    b.addEventListener('click', function () { showTab(b.dataset.tab); });
+  });
+
+  function openProduct(id) {
+    state.currentId = id;
+    var p = state.products[id];
+    state.amount = (p && MC.edibleWeight(p)) || 100;
+    showTab('scan');
+    renderItem();
+    renderResults();
+  }
+
+  // ---------- item form ----------
+  var MAC_FIELDS = [
+    { k: 'kcal', l: 'kcal' }, { k: 'p', l: 'Protein g' }, { k: 'f', l: 'Fat g' }, { k: 'c', l: 'Carbs g' }, { k: 'fiber', l: 'Fibre g' }
+  ];
+  var PACK_FIELDS = [
+    { k: 'pack', l: 'Pack g' }, { k: 'edible', l: 'Drained g' }, { k: 'price', l: 'Price €' }
+  ];
+  function inp(p, f) {
+    return '<label class="f">' + f.l + '<input type="text" inputmode="decimal" autocomplete="off" data-k="' + f.k + '" value="' +
+      (p[f.k] == null ? '' : esc(p[f.k])) + '"></label>';
+  }
+
+  function renderItem() {
+    var box = $('#item'), p = cur();
+    if (!p) { box.innerHTML = '<div class="card muted">Scan a barcode, or add an item manually, to see how it fits your day.</div>'; return; }
+    box.innerHTML =
+      '<div class="card">' +
+      '<input type="text" class="name" id="f_name" placeholder="Name" value="' + esc(p.name) + '" autocomplete="off">' +
+      '<div class="sub">' + esc(p.brand) + (p.brand && p.barcode ? ' · ' : '') + esc(p.barcode) +
+      (p.source === 'off' ? ' · Open Food Facts' : ' · manual') + '</div>' +
+      '<div id="notices"></div>' +
+      '<h3>Per 100 g (from the label)</h3>' +
+      '<div class="grid5">' + MAC_FIELDS.map(function (f) { return inp(p, f); }).join('') + '</div>' +
+      '<p class="muted" style="margin:4px 0 0">kcal and fibre are optional; kcal is worked out from the macros if left empty.</p>' +
+      '<h3>Pack &amp; price</h3>' +
+      '<div class="grid3">' + PACK_FIELDS.map(function (f) { return inp(p, f); }).join('') + '</div>' +
+      '<p class="muted" id="priceNote" style="margin:4px 0 0"></p>' +
+      '<h3>Amount to eat</h3>' +
+      '<label class="f">Grams<input type="text" inputmode="decimal" id="amt" autocomplete="off" value="' + esc(state.amount == null ? '' : fmt(state.amount, 1)) + '"></label>' +
+      '<div class="chips" id="amtChips"></div>' +
+      '<div class="row-actions" style="margin-top:10px"><button class="danger small" id="delItem">Delete this item</button></div>' +
+      '</div>';
+    updateNotices(); updatePriceNote(); renderChips();
+  }
+
+  function updateNotices() {
+    var p = cur(), box = $('#notices'); if (!p || !box) return;
+    var h = '';
+    if (MC.isIncomplete(p)) h += '<div class="notice">Protein, fat or carbs is empty. Fill them in from the label (0 is fine).</div>';
+    var s = MC.sanity(p);
+    if (s) h += '<div class="notice">Label says ' + fmt(s.label, 0) + ' kcal but the macros add up to about ' + fmt(s.computed, 0) + ' kcal. Check the label; numbers below use ' + fmt(s.label, 0) + ' kcal.</div>';
+    box.innerHTML = h;
+  }
+  function updatePriceNote() {
+    var p = cur(), el = $('#priceNote'); if (!p || !el) return;
+    var t = [];
+    if (p.price > 0 && p.priceDate) t.push('Price entered ' + esc(p.priceDate));
+    t.push('Label values usually describe the drained product, so “Drained g” (if set) is used for cost per macro.');
+    el.innerHTML = t.join(' · ');
+  }
+  function renderChips() {
+    var p = cur(), box = $('#amtChips'); if (!p || !box) return;
+    var chips = [];
+    if (p.pack > 0) { chips.push(['Whole pack', p.pack]); chips.push(['½ pack', p.pack / 2]); }
+    if (p.edible > 0) chips.push(['Drained', p.edible]);
+    chips.push(['100 g', 100]);
+    box.innerHTML = chips.map(function (c) {
+      return '<button class="chip" data-g="' + c[1] + '">' + c[0] + ' (' + fmt(c[1], 0) + ' g)</button>';
+    }).join('');
+  }
+
+  $('#item').addEventListener('input', function (e) {
+    var p = cur(), t = e.target; if (!p) return;
+    if (t.id === 'f_name') { p.name = t.value; saveProducts(); return; }
+    if (t.id === 'amt') { state.amount = MC.num(t.value); renderResults(); return; }
+    var k = t.dataset && t.dataset.k; if (!k) return;
+    p[k] = MC.num(t.value);
+    if (k === 'price') p.priceDate = p.price > 0 ? MC.dmy() : '';
+    saveProducts(); updateNotices(); updatePriceNote();
+    if (k === 'pack' || k === 'edible') renderChips();
+    renderResults();
+  });
+  $('#item').addEventListener('click', function (e) {
+    var p = cur(), t = e.target;
+    var chip = t.closest && t.closest('.chip');
+    if (chip && p) {
+      state.amount = parseFloat(chip.dataset.g);
+      $('#amt').value = fmt(state.amount, 1);
+      renderResults(); return;
+    }
+    if (t.id === 'delItem' && p && confirm('Delete “' + (p.name || 'this item') + '”?')) {
+      delete state.products[p.id]; saveProducts(); state.currentId = null; renderItem(); renderResults();
+    }
+  });
+
+  // ---------- results ----------
+  function tile(v, l, d) { return '<div class="tile"><b>' + fmt(v, d) + '</b><span>' + l + '</span></div>'; }
+  function kv(l, v) { return '<div class="kv"><span>' + l + '</span><span>' + v + '</span></div>'; }
+
+  function fitColumns() {
+    var cols = [], r = state.remaining, today = MC.dmy();
+    if (r && r.p != null && r.f != null && r.c != null) {
+      cols.push({ id: 'rem', label: 'Left today', b: r, note: r.date && r.date !== today ? 'from ' + r.date : '' });
+    }
+    ['train', 'rest'].forEach(function (id) {
+      var t = state.targets[id];
+      if (t && t.p != null && t.f != null && t.c != null) cols.push({ id: id, label: id === 'train' ? 'Training day' : 'Rest day', b: t, note: '' });
+    });
+    return cols;
+  }
+
+  function cellClass(left, pct) { return left < -0.0001 ? 'neg' : (pct >= 90 ? 'warnc' : ''); }
+
+  function fitTable(p, g) {
+    var cols = fitColumns();
+    if (!cols.length) return '<p class="muted">Set your training and rest day targets in Settings to see how this fits your day.</p>';
+    var fits = cols.map(function (c) { return MC.fit(p, g, c.b); });
+    var h = '<table><thead><tr><th>Left after eating</th>' + cols.map(function (c) {
+      return '<th class="' + (c.id === state.ui.day ? 'hl' : '') + '">' + c.label + (c.note ? '<small>' + c.note + '</small>' : '') + '</th>';
+    }).join('') + '</tr></thead><tbody>';
+    [['kcal', 'kcal', 0], ['p', 'Protein', 1], ['f', 'Fat', 1], ['c', 'Carbs', 1]].forEach(function (r) {
+      h += '<tr><td>' + r[1] + '</td>' + fits.map(function (f, i) {
+        var left = f.left[r[0]], pct = f.pct[r[0]];
+        var u = r[0] === 'kcal' ? '' : ' g';
+        return '<td class="' + (cols[i].id === state.ui.day ? 'hl' : '') + '"><span class="' + cellClass(left, pct) + '">' +
+          fmt(left, r[2]) + u + '</span><small>' + (Number.isFinite(pct) ? fmt(pct, 0) + '% used' : 'over') + '</small></td>';
+      }).join('') + '</tr>';
+    });
+    h += '<tr><td>Max amount</td>' + fits.map(function (f, i) {
+      var cls = cols[i].id === state.ui.day ? 'hl' : '';
+      if (f.maxGrams == null) return '<td class="' + cls + '">—</td>';
+      var over = g > f.maxGrams + 0.0001;
+      return '<td class="' + cls + '"><span class="' + (over ? 'neg' : 'okc') + '">' + fmt(Math.floor(f.maxGrams), 0) + ' g</span>' +
+        '<small>limit: ' + LIMIT_LABEL[f.limit] + '</small></td>';
+    }).join('') + '</tr></tbody></table>';
+    return h;
+  }
+
+  function renderResults() {
+    var p = cur(), box = $('#results');
+    if (!p) { box.innerHTML = ''; return; }
+    var g = state.amount;
+    if (!(g > 0)) { box.innerHTML = '<div class="card muted">Enter the amount in grams to see the numbers.</div>'; return; }
+    var s = MC.scale(p, g), m = MC.metrics(p), w = MC.edibleWeight(p);
+    var h = '<div class="card"><h3 style="margin-top:0">This amount: ' + fmt(g, 0) + ' g</h3>' +
+      '<div class="tiles">' + tile(s.kcal, 'kcal', 0) + tile(s.p, 'protein g') + tile(s.f, 'fat g') + tile(s.c, 'carbs g') + '</div>';
+    if (p.price > 0 && w > 0) h += '<p class="muted" style="margin:8px 0 0">Costs about ' + eur(p.price * g / w) + ' for this amount.</p>';
+    h += '</div>';
+
+    h += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+      '<h3 style="margin:0">Fit for your day</h3>' +
+      '<div class="seg" id="daySeg"><button data-day="train" class="' + (state.ui.day === 'train' ? 'on' : '') + '">Training</button>' +
+      '<button data-day="rest" class="' + (state.ui.day === 'rest' ? 'on' : '') + '">Rest</button></div></div>' +
+      '<div style="margin-top:8px">' + fitTable(p, g) + '</div></div>';
+
+    h += '<div class="card"><h3 style="margin-top:0">Quality of the source</h3>' +
+      kv('Protein / fat / carbs per 100 kcal', fmt(m.pPer100kcal) + ' / ' + fmt(m.fPer100kcal) + ' / ' + fmt(m.cPer100kcal) + ' g') +
+      kv('Share of calories (P / F / C)', fmt(m.pShare, 0) + ' / ' + fmt(m.fShare, 0) + ' / ' + fmt(m.cShare, 0) + ' %') +
+      (m.fiberPer100kcal != null ? kv('Fibre per 100 kcal', fmt(m.fiberPer100kcal) + ' g') : '') +
+      '</div>';
+
+    if (p.price > 0 && w > 0) {
+      h += '<div class="card"><h3 style="margin-top:0">Cost</h3>' +
+        kv('Per 100 g protein', eur(m.costPerGP == null ? null : m.costPerGP * 100)) +
+        kv('Per 25 g protein', eur(m.costPerGP == null ? null : m.costPerGP * 25)) +
+        kv('Per 100 g fat', eur(m.costPerGF == null ? null : m.costPerGF * 100)) +
+        kv('Per 100 g carbs', eur(m.costPerGC == null ? null : m.costPerGC * 100)) +
+        kv('kcal per €', fmt(m.kcalPerEuro, 0)) + '</div>';
+    } else {
+      h += '<div class="card muted">Add a price (and pack weight) to see cost per gram of protein, fat and carbs.</div>';
+    }
+    box.innerHTML = h;
+  }
+  $('#results').addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('#daySeg button');
+    if (b) { state.ui.day = b.dataset.day; saveUi(); renderResults(); }
+  });
+
+  // ---------- remaining today ----------
+  function loadRemaining() {
+    var r = state.remaining;
+    $('#r_p').value = r.p == null ? '' : r.p; $('#r_f').value = r.f == null ? '' : r.f; $('#r_c').value = r.c == null ? '' : r.c;
+    updateRemainingInfo();
+  }
+  function updateRemainingInfo() {
+    var r = state.remaining, ok = r.p != null && r.f != null && r.c != null;
+    $('#r_kcal').value = ok ? fmt(MC.macroKcal(r.p, r.f, r.c), 0) : '';
+    var today = MC.dmy();
+    $('#remSummary').textContent = ok ? '· ' + fmt(MC.macroKcal(r.p, r.f, r.c), 0) + ' kcal' : '';
+    $('#remNote').textContent = ok && r.date && r.date !== today ? 'These numbers are from ' + r.date + ' — update them for today.' : (ok ? 'Entered today.' : 'Fill in all three to use it.');
+  }
+  ['p', 'f', 'c'].forEach(function (k) {
+    $('#r_' + k).addEventListener('input', function (e) {
+      state.remaining[k] = MC.num(e.target.value); state.remaining.date = MC.dmy();
+      saveRemaining(); updateRemainingInfo(); renderResults();
+    });
+  });
+  $('#remClear').addEventListener('click', function () {
+    state.remaining = { p: null, f: null, c: null, date: '' }; saveRemaining(); loadRemaining(); renderResults();
+  });
+
+  // ---------- lookup ----------
+  var stripZ = function (s) { return String(s).replace(/^0+/, ''); };
+  async function lookup(raw) {
+    var code = String(raw || '').replace(/\D/g, '');
+    if (!code) { toast('Enter a barcode'); return; }
+    var ex = Object.values(state.products).find(function (p) { return p.barcode && stripZ(p.barcode) === stripZ(code); });
+    if (ex) { openProduct(ex.id); toast('Already in your library'); return; }
+    toast('Looking up ' + code + '…');
+    var prod;
+    try {
+      var r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(code) +
+        '.json?fields=code,product_name,brands,nutriments,product_quantity,quantity');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var j = await r.json();
+      if (j.status !== 1 || !j.product) {
+        prod = newProduct({ barcode: code });
+        toast('Not in Open Food Facts — enter the macros from the label.');
+      } else {
+        var pr = j.product, n = pr.nutriments || {};
+        var g = function (k) { return typeof n[k] === 'number' ? n[k] : MC.num(n[k]); };
+        prod = newProduct({
+          barcode: code, source: 'off', name: pr.product_name || '', brand: (pr.brands || '').split(',')[0].trim(),
+          kcal: g('energy-kcal_100g'), p: g('proteins_100g'), f: g('fat_100g'), c: g('carbohydrates_100g'),
+          fiber: g('fiber_100g'), pack: MC.num(pr.product_quantity)
+        });
+        toast('Found. Check the pack weight and add the price.');
+      }
+    } catch (err) {
+      prod = newProduct({ barcode: code });
+      toast('Lookup failed (' + (err.message || err) + '). Enter the macros manually.');
+    }
+    state.products[prod.id] = prod; saveProducts(); openProduct(prod.id);
+  }
+  $('#btnLookup').addEventListener('click', function () { lookup($('#barcodeInput').value); $('#barcodeInput').value = ''; });
+  $('#barcodeInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('#btnLookup').click(); });
+  $('#btnManual').addEventListener('click', function () {
+    var p = newProduct({}); state.products[p.id] = p; saveProducts(); openProduct(p.id);
+    var n = $('#f_name'); if (n) n.focus();
+  });
+
+  // ---------- scanner ----------
+  var scanStream = null, scanTimer = null, zx = null;
+  function loadScript(src) {
+    return new Promise(function (res, rej) {
+      var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function () { rej(new Error('load failed')); };
+      document.head.appendChild(s);
+    });
+  }
+  function closeScanner() {
+    clearInterval(scanTimer); scanTimer = null;
+    if (zx) { try { zx.reset(); } catch (e) {} zx = null; }
+    if (scanStream) { scanStream.getTracks().forEach(function (t) { t.stop(); }); scanStream = null; }
+    $('#video').srcObject = null; $('#scanner').hidden = true;
+  }
+  function onScanned(code) {
+    if (!MC.validBarcode(code)) return false;
+    closeScanner();
+    if (navigator.vibrate) navigator.vibrate(60);
+    lookup(code);
+    return true;
+  }
+  async function openScanner() {
+    var v = $('#video'), st = $('#scanStatus');
+    $('#scanner').hidden = false; st.textContent = 'Starting camera…';
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      st.textContent = 'Camera not available here (needs HTTPS). Close and type the barcode.'; return;
+    }
+    try {
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      v.srcObject = scanStream; await v.play();
+    } catch (e) {
+      st.textContent = 'Camera blocked or unavailable (' + (e.name || e) + '). Close and type the barcode.'; return;
+    }
+    st.textContent = 'Point at the barcode';
+    var formats = ['ean_13', 'ean_8', 'upc_a'];
+    if ('BarcodeDetector' in window) {
+      try { var sup = await BarcodeDetector.getSupportedFormats(); formats = formats.filter(function (f) { return sup.indexOf(f) >= 0; }); } catch (e) {}
+      if (formats.length) {
+        var det = new BarcodeDetector({ formats: formats }), busy = false;
+        scanTimer = setInterval(async function () {
+          if (busy) return; busy = true;
+          try { var codes = await det.detect(v); for (var i = 0; i < codes.length; i++) { if (onScanned(codes[i].rawValue)) break; } } catch (e) {}
+          busy = false;
+        }, 250);
+        return;
+      }
+    }
+    st.textContent = 'Loading scanner library…';
+    try {
+      await loadScript('https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js');
+      var hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A]);
+      zx = new ZXing.BrowserMultiFormatReader(hints, 300);
+      st.textContent = 'Point at the barcode';
+      zx.decodeFromVideoElement(v, function (res) { if (res) onScanned(res.getText()); });
+    } catch (e) {
+      st.textContent = 'Scanner library could not load. Close and type the barcode.';
+    }
+  }
+  $('#btnScan').addEventListener('click', openScanner);
+  $('#scanClose').addEventListener('click', closeScanner);
+
+  // ---------- library ----------
+  var QUICK = [
+    ['Pure protein', 'pPer100kcal'], ['Pure fat', 'fPer100kcal'], ['Pure carbs', 'cPer100kcal'],
+    ['Cheapest protein', 'costP'], ['Cheapest fat', 'costF'], ['Cheapest carbs', 'costC']
+  ];
+  function initLib() {
+    $('#sortSel').innerHTML = MC.METRICS.map(function (m) { return '<option value="' + m.key + '">' + esc(m.label) + '</option>'; }).join('');
+    $('#sortSel').value = state.ui.sort;
+    $('#sortSel').addEventListener('change', function (e) { state.ui.sort = e.target.value; saveUi(); renderLib(); });
+    $('#dirBtn').addEventListener('click', function () { state.ui.dir = state.ui.dir === 'best' ? 'worst' : 'best'; saveUi(); renderLib(); });
+    $('#search').addEventListener('input', renderLib);
+    $('#quick').addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('.chip'); if (!b) return;
+      state.ui.sort = b.dataset.key; state.ui.dir = 'best'; saveUi(); $('#sortSel').value = state.ui.sort; renderLib();
+    });
+    $('#libList').addEventListener('click', function (e) {
+      var r = e.target.closest && e.target.closest('.lib-row'); if (r) openProduct(r.dataset.id);
+    });
+  }
+  function renderLib() {
+    $('#quick').innerHTML = QUICK.map(function (q) {
+      return '<button class="chip ' + (state.ui.sort === q[1] ? 'on' : '') + '" data-key="' + q[1] + '">' + q[0] + '</button>';
+    }).join('');
+    $('#dirBtn').textContent = state.ui.dir === 'best' ? 'Best first' : 'Worst first';
+    var q = $('#search').value.trim().toLowerCase();
+    var all = Object.values(state.products);
+    var list = all.filter(function (p) { return !q || (p.name + ' ' + p.brand).toLowerCase().indexOf(q) >= 0; });
+    var rows = MC.sortProducts(list, state.ui.sort, state.ui.dir), def = MC.metricDef(state.ui.sort);
+    if (!all.length) { $('#libList').innerHTML = '<p class="muted">Nothing here yet. Scanned and manual items show up in this list.</p>'; return; }
+    var vals = rows.filter(function (r) { return r.value != null; }).map(function (r) { return r.value; });
+    var mx = Math.max.apply(null, vals.concat([0])), mn = Math.min.apply(null, vals.concat([Infinity]));
+    var h = '<p class="muted" style="margin:0 0 4px">' + rows.length + ' item' + (rows.length === 1 ? '' : 's') + ' · ' + esc(def.label) +
+      (def.better === 'low' ? ' (lower is better)' : '') + '</p>';
+    rows.forEach(function (r, i) {
+      var p = r.prod, v = r.value, m = MC.metrics(p);
+      var width = 0;
+      if (v != null) width = def.better === 'high' ? (mx > 0 ? v / mx : 0) : (v > 0 ? mn / v : 1);
+      var flags = (MC.sanity(p) ? ' ⚠️' : '') + (MC.isIncomplete(p) ? ' ❓' : '');
+      var unit = def.unit === '€' ? '' : ' ' + def.unit;
+      h += '<div class="lib-row" data-id="' + esc(p.id) + '"><div class="rank">' + (v != null ? i + 1 : '') + '</div>' +
+        '<div><div class="nm">' + esc(p.name || '(no name)') + flags + '</div>' +
+        '<div class="sub">' + fmt(m.kcal, 0) + ' kcal · P ' + fmt(m.p100) + ' · F ' + fmt(m.f100) + ' · C ' + fmt(m.c100) + ' per 100 g' +
+        (p.price > 0 ? ' · ' + eur(p.price) : '') + '</div></div>' +
+        '<div class="val">' + (v == null ? '<small>n/a</small>' : (def.unit === '€' ? '€' + v.toFixed(def.dec) : fmt(v, def.dec) + '<small>' + unit + '</small>')) + '</div>' +
+        (v != null ? '<div class="bar" style="width:' + Math.max(3, Math.round(width * 100)) + '%"></div>' : '') + '</div>';
+    });
+    $('#libList').innerHTML = h;
+  }
+
+  // ---------- settings ----------
+  function loadTargets() {
+    ['train', 'rest'].forEach(function (id) {
+      ['p', 'f', 'c'].forEach(function (k) {
+        var v = state.targets[id][k]; $('#t_' + id + '_' + k).value = v == null ? '' : v;
+      });
+      updateTargetKcal(id);
+    });
+  }
+  function updateTargetKcal(id) {
+    var t = state.targets[id], ok = t.p != null && t.f != null && t.c != null;
+    $('#t_' + id + '_kcal').value = ok ? fmt(MC.macroKcal(t.p, t.f, t.c), 0) : '';
+  }
+  ['train', 'rest'].forEach(function (id) {
+    ['p', 'f', 'c'].forEach(function (k) {
+      $('#t_' + id + '_' + k).addEventListener('input', function (e) {
+        state.targets[id][k] = MC.num(e.target.value); saveTargets(); updateTargetKcal(id); renderResults();
+      });
+    });
+  });
+
+  function download(name, text, type) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: type }));
+    a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function stamp() { return MC.dmy().replace(/\//g, '-'); }
+  $('#expCsv').addEventListener('click', function () {
+    download('macro-check-' + stamp() + '.csv', MC.toCsv(Object.values(state.products)), 'text/csv'); });
+  $('#expJson').addEventListener('click', function () {
+    download('macro-check-backup-' + stamp() + '.json',
+      JSON.stringify({ version: 1, products: state.products, targets: state.targets, remaining: state.remaining }, null, 2), 'application/json'); });
+  $('#impJson').addEventListener('click', function () { $('#impFile').click(); });
+  $('#impFile').addEventListener('change', function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        var d = JSON.parse(rd.result);
+        if (!d || typeof d.products !== 'object') throw new Error('not a Macro Check backup');
+        Object.keys(d.products).forEach(function (k) { state.products[k] = d.products[k]; });
+        if (d.targets && d.targets.train && d.targets.rest) state.targets = d.targets;
+        saveProducts(); saveTargets(); loadTargets(); renderLib(); renderItem(); renderResults();
+        toast('Backup restored');
+      } catch (err) { toast('Could not read that file: ' + err.message); }
+    };
+    rd.readAsText(f); e.target.value = '';
+  });
+  $('#wipe').addEventListener('click', function () {
+    if (confirm('Delete ALL items? Targets are kept. This cannot be undone.')) {
+      state.products = {}; saveProducts(); state.currentId = null; renderItem(); renderResults(); renderLib(); toast('All items deleted');
+    }
+  });
+
+  // ---------- init ----------
+  initLib(); loadTargets(); loadRemaining(); renderItem(); renderResults();
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
