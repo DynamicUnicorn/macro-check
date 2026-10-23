@@ -1,5 +1,5 @@
-// Run: node tests.js   (all numbers below are SYNTHETIC examples worked out by hand)
-const MC = require('./core.js');
+// Run: npm test  (or: node tests/unit.js)   (all numbers below are SYNTHETIC examples worked out by hand)
+const MC = require('../core.js');
 let fails = 0;
 function eq(name, got, want, tol = 1e-6) {
   const ok = (got === want) || (typeof got === 'number' && typeof want === 'number' && Math.abs(got - want) <= tol);

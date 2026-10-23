@@ -1,0 +1,15 @@
+{
+  "name": "macro-check",
+  "version": "5.0.0",
+  "private": true,
+  "description": "Phone web app: scan a food, see how it fits your macros and what the protein costs.",
+  "scripts": {
+    "test": "node tests/unit.js && node tests/ui-smoke.js",
+    "test:unit": "node tests/unit.js",
+    "test:ui": "node tests/ui-smoke.js"
+  },
+  "engines": { "node": ">=20" },
+  "devDependencies": {
+    "jsdom": "29.1.1"
+  }
+}

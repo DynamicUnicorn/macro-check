@@ -23,8 +23,9 @@ Live app: https://dynamicunicorn.github.io/macro-check/
 5. [Files in this project](#files-in-this-project)
 6. [Updating and deploying](#updating-and-deploying)
 7. [Tests](#tests)
-8. [Known limitations](#known-limitations)
-9. [Changelog](#changelog)
+8. [Working on another machine](#working-on-another-machine)
+9. [Known limitations](#known-limitations)
+10. [Changelog](#changelog)
 
 ---
 
@@ -142,7 +143,11 @@ Both databases are crowd-sourced: always glance at the label. If a product isn't
 | `sw.js` | Service worker: caches the app for offline use and fast start. |
 | `manifest.webmanifest` | Makes the app installable (name, icons, colours). |
 | `icon-192.png`, `icon-512.png` | App icons. |
-| `tests.js` | Unit tests for `core.js`. |
+| `tests/unit.js` | Unit tests for `core.js` (hand-calculated cases). |
+| `tests/ui-smoke.js` | UI test: runs the real `index.html` in a simulated browser (jsdom), with Open Food Facts and Open Prices mocked, and clicks through every feature. |
+| `package.json`, `package-lock.json` | Test scripts and the one test dependency (jsdom). Not used by the app itself. |
+| `.github/workflows/test.yml` | Runs all tests on GitHub on every push. |
+| `CLAUDE.md` | Project conventions for Claude when working on this repo in a new session. |
 | `README.md` | This document. |
 
 ---
@@ -152,7 +157,7 @@ Both databases are crowd-sourced: always glance at the label. If a product isn't
 The site is served by **GitHub Pages** from the `main` branch, root folder, of `DynamicUnicorn/macro-check`. Every push to `main` republishes the site within a minute or two.
 
 When changing any app file:
-1. Run the tests (below).
+1. Run the tests: `npm test` (see below).
 2. **Bump `VERSION` in `sw.js`** (e.g. `macro-check-v5` → `macro-check-v6`). Without this, phones keep showing the cached old version.
 3. Commit and push to `main`.
 4. On the phone, close and reopen the app once to load the new version.
@@ -163,10 +168,30 @@ Commits use the GitHub noreply address (`317667440+DynamicUnicorn@users.noreply.
 
 ## Tests
 
+Needs [Node.js](https://nodejs.org) 20 or newer. From the project folder, on any machine:
+
 ```
-node tests.js
+npm install      # once: installs jsdom for the UI test
+npm test         # runs both test suites
 ```
-Runs hand-calculated checks for parsing (comma decimals), scaling, every metric, the budget fit and max amount, liquids, price per kg/litre, sorting (including A–Z), aliases and search, Fill my gap, Compare, the rescan merge rules (edited fields kept), price history, CSV output and barcode checksums. All test products are synthetic examples, not real label data.
+
+- `npm run test:unit`: hand-calculated checks for parsing (comma decimals), scaling, every metric, the budget fit and max amount, liquids, price per kg/litre, sorting (including A–Z), aliases and search, Fill my gap, Compare, the rescan merge rules (edited fields kept), price history, CSV output and barcode checksums. All test products are synthetic examples, not real label data.
+- `npm run test:ui`: loads the app in a simulated browser and checks targets, manual entry, barcode lookup (mocked), crowd prices, layout order, liquids, servings, price history, the library and its sorting, aliases, the picker, Fill my gap, Compare and a full rescan. It doesn't cover the camera, the flashlight or real network calls.
+
+GitHub also runs `npm test` on every push (the **Actions** tab). A red cross on a commit means a test failed.
+
+---
+
+## Working on another machine
+
+Everything needed lives in the GitHub repo; nothing depends on a specific computer.
+
+1. `git clone https://github.com/DynamicUnicorn/macro-check` (or `git pull` in an existing copy).
+2. `git config user.email "317667440+DynamicUnicorn@users.noreply.github.com"` in that copy, so pushes aren't blocked by email privacy.
+3. `npm install`, then `npm test` before pushing.
+4. Follow [Updating and deploying](#updating-and-deploying).
+
+With Claude: open the same chat on any device, or start a new one and ask Claude to attach `DynamicUnicorn/macro-check`; `CLAUDE.md` gives it the project conventions.
 
 ---
 
@@ -188,6 +213,7 @@ Runs hand-calculated checks for parsing (comma decimals), scaling, every metric,
 
 All dates dd/mm/yyyy.
 
+- **23/10/2026 – tooling**: tests moved to `tests/`, made path-independent, runnable with `npm test` on any machine and on GitHub Actions; `CLAUDE.md` added.
 - **23/10/2026 – v5**: custom names (aliases) shown everywhere without changing the product name; compact searchable item picker for Compare.
 - **23/10/2026 – v4**: Tools tab with *Fill my gap* and *Compare*; flashlight in the scanner; saved servings; price history; *Rescan library* (keeps your own edits); *Left today* moved to Settings.
 - **23/10/2026 – v3**: liquids (ml) support, € per kg/litre (and per kg drained), A–Z sorting, this documentation.
