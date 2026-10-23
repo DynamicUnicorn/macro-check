@@ -265,9 +265,13 @@
   var MAC_FIELDS = [
     { k: 'kcal', l: 'kcal' }, { k: 'p', l: 'Protein g' }, { k: 'f', l: 'Fat g' }, { k: 'c', l: 'Carbs g' }, { k: 'fiber', l: 'Fibre g' }
   ];
-  var PACK_FIELDS = [
-    { k: 'pack', l: 'Pack g' }, { k: 'edible', l: 'Drained g' }, { k: 'price', l: 'Price €' }
-  ];
+  function U(p) { return MC.unit(p); }   // 'g' or 'ml'
+  function packFields(p) {
+    var f = [{ k: 'pack', l: 'Pack ' + U(p) }];
+    if (U(p) === 'g') f.push({ k: 'edible', l: 'Drained g' });
+    f.push({ k: 'price', l: 'Price €' });
+    return f;
+  }
   function inp(p, f) {
     return '<label class="f">' + f.l + '<input type="text" inputmode="decimal" autocomplete="off" data-k="' + f.k + '" value="' +
       (p[f.k] == null ? '' : esc(p[f.k])) + '"></label>';
@@ -282,15 +286,18 @@
       '<div class="sub">' + esc(p.brand) + (p.brand && p.barcode ? ' · ' : '') + esc(p.barcode) +
       (p.source === 'off' ? ' · Open Food Facts' : ' · manual') + '</div>' +
       '<div id="notices"></div>' +
-      '<h3>Per 100 g (from the label)</h3>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:14px">' +
+      '<h3 style="margin:0">Per 100 ' + U(p) + ' (from the label)</h3>' +
+      '<div class="seg" id="unitSeg"><button data-u="g" class="' + (U(p) === 'g' ? 'on' : '') + '">Solid (g)</button>' +
+      '<button data-u="ml" class="' + (U(p) === 'ml' ? 'on' : '') + '">Liquid (ml)</button></div></div>' +
       '<div class="grid5">' + MAC_FIELDS.map(function (f) { return inp(p, f); }).join('') + '</div>' +
       '<p class="muted" style="margin:4px 0 0">kcal and fibre are optional; kcal is worked out from the macros if left empty.</p>' +
       '<h3>Pack &amp; price</h3>' +
-      '<div class="grid3">' + PACK_FIELDS.map(function (f) { return inp(p, f); }).join('') + '</div>' +
+      '<div class="grid3">' + packFields(p).map(function (f) { return inp(p, f); }).join('') + '</div>' +
       '<div id="priceHint"></div>' +
       '<p class="muted" id="priceNote" style="margin:4px 0 0"></p>' +
       '<h3>Amount to eat</h3>' +
-      '<label class="f">Grams<input type="text" inputmode="decimal" id="amt" autocomplete="off" value="' + esc(state.amount == null ? '' : fmt(state.amount, 1)) + '"></label>' +
+      '<label class="f">Amount (' + U(p) + ')<input type="text" inputmode="decimal" id="amt" autocomplete="off" value="' + esc(state.amount == null ? '' : fmt(state.amount, 1)) + '"></label>' +
       '<div class="chips" id="amtChips"></div>' +
       '<div class="row-actions" style="margin-top:10px"><button class="danger small" id="delItem">Delete this item</button></div>' +
       '</div>';
@@ -348,17 +355,18 @@
     var p = cur(), el = $('#priceNote'); if (!p || !el) return;
     var t = [];
     if (p.price > 0 && p.priceDate) t.push('Price entered ' + esc(p.priceDate));
-    t.push('Label values usually describe the drained product, so “Drained g” (if set) is used for cost per macro.');
+    if (U(p) === 'g') t.push('Label values usually describe the drained product, so “Drained g” (if set) is used for cost per macro.');
     el.innerHTML = t.join(' · ');
   }
   function renderChips() {
     var p = cur(), box = $('#amtChips'); if (!p || !box) return;
     var chips = [];
     if (p.pack > 0) { chips.push(['Whole pack', p.pack]); chips.push(['½ pack', p.pack / 2]); }
-    if (p.edible > 0) chips.push(['Drained', p.edible]);
-    chips.push(['100 g', 100]);
+    if (U(p) === 'g' && p.edible > 0) chips.push(['Drained', p.edible]);
+    if (U(p) === 'ml') chips.push(['Glass', 250]);
+    chips.push(['100 ' + U(p), 100]);
     box.innerHTML = chips.map(function (c) {
-      return '<button class="chip" data-g="' + c[1] + '">' + c[0] + ' (' + fmt(c[1], 0) + ' g)</button>';
+      return '<button class="chip" data-g="' + c[1] + '">' + c[0] + ' (' + fmt(c[1], 0) + ' ' + U(p) + ')</button>';
     }).join('');
   }
 
@@ -380,6 +388,15 @@
       state.amount = parseFloat(chip.dataset.g);
       $('#amt').value = fmt(state.amount, 1);
       renderResults(); return;
+    }
+    var us = t.closest && t.closest('#unitSeg button');
+    if (us && p) {
+      if (p.unit !== us.dataset.u) {
+        p.unit = us.dataset.u;
+        if (p.unit === 'ml') p.edible = null;   // drained weight makes no sense for liquids
+        saveProducts(); renderItem(); renderResults();
+      }
+      return;
     }
     if (t.id === 'usePrice' && p) {
       var hh = priceHints[p.barcode];
@@ -432,7 +449,7 @@
       var cls = cols[i].id === state.ui.day ? 'hl' : '';
       if (f.maxGrams == null) return '<td class="' + cls + '">—</td>';
       var over = g > f.maxGrams + 0.0001;
-      return '<td class="' + cls + '"><span class="' + (over ? 'neg' : 'okc') + '">' + fmt(Math.floor(f.maxGrams), 0) + ' g</span>' +
+      return '<td class="' + cls + '"><span class="' + (over ? 'neg' : 'okc') + '">' + fmt(Math.floor(f.maxGrams), 0) + ' ' + U(p) + '</span>' +
         '<small>limit: ' + LIMIT_LABEL[f.limit] + '</small></td>';
     }).join('') + '</tr></tbody></table>';
     return h;
@@ -445,7 +462,7 @@
     var g = state.amount;
     if (!(g > 0)) { box.innerHTML = '<div class="card muted">Enter the amount in grams to see the numbers.</div>'; fitBox.innerHTML = ''; return; }
     var s = MC.scale(p, g), m = MC.metrics(p), w = MC.edibleWeight(p);
-    var h = '<div class="card"><h3 style="margin-top:0">This amount: ' + fmt(g, 0) + ' g</h3>' +
+    var h = '<div class="card"><h3 style="margin-top:0">This amount: ' + fmt(g, 0) + ' ' + U(p) + '</h3>' +
       '<div class="tiles">' + tile(s.kcal, 'kcal', 0) + tile(s.p, 'protein g') + tile(s.f, 'fat g') + tile(s.c, 'carbs g') + '</div>';
     if (p.price > 0 && w > 0) h += '<p class="muted" style="margin:8px 0 0">Costs about ' + eur(p.price * g / w) + ' for this amount.</p>';
     h += '</div>';
@@ -459,6 +476,8 @@
 
     if (p.price > 0 && w > 0) {
       h += '<div class="card"><h3 style="margin-top:0">Cost</h3>' +
+        kv('Per ' + (U(p) === 'ml' ? 'litre' : 'kg') + ' (whole pack)', eur(m.pricePerKg)) +
+        (m.pricePerKgDrained != null ? kv('Per kg (drained)', eur(m.pricePerKgDrained)) : '') +
         kv('Per 100 g protein', eur(m.costPerGP == null ? null : m.costPerGP * 100)) +
         kv('Per 25 g protein', eur(m.costPerGP == null ? null : m.costPerGP * 25)) +
         kv('Per 100 g fat', eur(m.costPerGF == null ? null : m.costPerGF * 100)) +
@@ -513,7 +532,7 @@
     var prod;
     try {
       var r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(code) +
-        '.json?fields=code,product_name,brands,nutriments,product_quantity,quantity');
+        '.json?fields=code,product_name,brands,nutriments,product_quantity,product_quantity_unit,quantity');
       if (!r.ok) throw new Error('HTTP ' + r.status);
       var j = await r.json();
       if (j.status !== 1 || !j.product) {
@@ -525,7 +544,8 @@
         prod = newProduct({
           barcode: code, source: 'off', name: pr.product_name || '', brand: (pr.brands || '').split(',')[0].trim(),
           kcal: g('energy-kcal_100g'), p: g('proteins_100g'), f: g('fat_100g'), c: g('carbohydrates_100g'),
-          fiber: g('fiber_100g'), pack: MC.num(pr.product_quantity)
+          fiber: g('fiber_100g'), pack: MC.num(pr.product_quantity),
+          unit: /^(ml|cl|l)$/i.test(pr.product_quantity_unit || '') ? 'ml' : 'g'
         });
         toast('Found. Check the pack weight and add the price.');
       }
@@ -607,7 +627,7 @@
   // ---------- library ----------
   var QUICK = [
     ['Pure protein', 'pPer100kcal'], ['Pure fat', 'fPer100kcal'], ['Pure carbs', 'cPer100kcal'],
-    ['Cheapest protein', 'costP'], ['Cheapest fat', 'costF'], ['Cheapest carbs', 'costC']
+    ['Cheapest protein', 'costP'], ['Cheapest fat', 'costF'], ['Cheapest carbs', 'costC'], ['A–Z', 'name']
   ];
   function initLib() {
     $('#sortSel').innerHTML = MC.METRICS.map(function (m) { return '<option value="' + m.key + '">' + esc(m.label) + '</option>'; }).join('');
@@ -627,11 +647,12 @@
     $('#quick').innerHTML = QUICK.map(function (q) {
       return '<button class="chip ' + (state.ui.sort === q[1] ? 'on' : '') + '" data-key="' + q[1] + '">' + q[0] + '</button>';
     }).join('');
-    $('#dirBtn').textContent = state.ui.dir === 'best' ? 'Best first' : 'Worst first';
+    $('#dirBtn').textContent = MC.metricDef(state.ui.sort).text ? (state.ui.dir === 'best' ? 'A → Z' : 'Z → A') : (state.ui.dir === 'best' ? 'Best first' : 'Worst first');
     var q = $('#search').value.trim().toLowerCase();
     var all = Object.values(state.products);
     var list = all.filter(function (p) { return !q || (p.name + ' ' + p.brand).toLowerCase().indexOf(q) >= 0; });
     var rows = MC.sortProducts(list, state.ui.sort, state.ui.dir), def = MC.metricDef(state.ui.sort);
+    var isText = !!def.text;
     if (!all.length) { $('#libList').innerHTML = '<p class="muted">Nothing here yet. Scanned and manual items show up in this list.</p>'; return; }
     var vals = rows.filter(function (r) { return r.value != null; }).map(function (r) { return r.value; });
     var mx = Math.max.apply(null, vals.concat([0])), mn = Math.min.apply(null, vals.concat([Infinity]));
@@ -643,11 +664,11 @@
       if (v != null) width = def.better === 'high' ? (mx > 0 ? v / mx : 0) : (v > 0 ? mn / v : 1);
       var flags = (MC.sanity(p) ? ' ⚠️' : '') + (MC.isIncomplete(p) ? ' ❓' : '');
       var unit = def.unit === '€' ? '' : ' ' + def.unit;
-      h += '<div class="lib-row" data-id="' + esc(p.id) + '"><div class="rank">' + (v != null ? i + 1 : '') + '</div>' +
+      h += '<div class="lib-row" data-id="' + esc(p.id) + '"><div class="rank">' + (v != null || isText ? i + 1 : '') + '</div>' +
         '<div><div class="nm">' + esc(p.name || '(no name)') + flags + '</div>' +
-        '<div class="sub">' + fmt(m.kcal, 0) + ' kcal · P ' + fmt(m.p100) + ' · F ' + fmt(m.f100) + ' · C ' + fmt(m.c100) + ' per 100 g' +
+        '<div class="sub">' + fmt(m.kcal, 0) + ' kcal · P ' + fmt(m.p100) + ' · F ' + fmt(m.f100) + ' · C ' + fmt(m.c100) + ' per 100 ' + MC.unit(p) +
         (p.price > 0 ? ' · ' + eur(p.price) : '') + '</div></div>' +
-        '<div class="val">' + (v == null ? '<small>n/a</small>' : (def.unit === '€' ? '€' + v.toFixed(def.dec) : fmt(v, def.dec) + '<small>' + unit + '</small>')) + '</div>' +
+        '<div class="val">' + (isText ? '' : v == null ? '<small>n/a</small>' : (def.unit === '€' ? '€' + v.toFixed(def.dec) : fmt(v, def.dec) + '<small>' + unit + '</small>')) + '</div>' +
         (v != null ? '<div class="bar" style="width:' + Math.max(3, Math.round(width * 100)) + '%"></div>' : '') + '</div>';
     });
     $('#libList').innerHTML = h;

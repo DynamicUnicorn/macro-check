@@ -1,5 +1,5 @@
 // Offline shell cache. Bump VERSION whenever any app file changes so phones pick up the update.
-const VERSION = 'macro-check-v2';
+const VERSION = 'macro-check-v3';
 const SHELL = ['./', 'index.html', 'core.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {

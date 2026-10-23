@@ -43,8 +43,11 @@
   }
 
   // ---------- per-product metrics ----------
+  // 'g' (solids, per 100 g) or 'ml' (liquids, per 100 ml). Missing = 'g'.
+  function unit(prod) { return prod && prod.unit === 'ml' ? 'ml' : 'g'; }
+
   function edibleWeight(prod) {
-    if (prod.edible > 0) return prod.edible;
+    if (unit(prod) === 'g' && prod.edible > 0) return prod.edible;
     if (prod.pack > 0) return prod.pack;
     return null;
   }
@@ -64,8 +67,12 @@
       fShare: derived > 0 ? (9 * f / derived) * 100 : null,
       cShare: derived > 0 ? (4 * c / derived) * 100 : null,
       costPerGP: null, costPerGF: null, costPerGC: null, // euro per gram of that macro
-      kcalPerEuro: null
+      kcalPerEuro: null,
+      pricePerKg: null,        // € per kg or per litre of the whole pack (shelf-label style)
+      pricePerKgDrained: null  // € per kg of drained weight (solids only)
     };
+    if (prod.price > 0 && prod.pack > 0) m.pricePerKg = prod.price / prod.pack * 1000;
+    if (prod.price > 0 && unit(prod) === 'g' && prod.edible > 0) m.pricePerKgDrained = prod.price / prod.edible * 1000;
     const w = edibleWeight(prod);
     if (prod.price > 0 && w > 0) {
       const gP = (w * p) / 100, gF = (w * f) / 100, gC = (w * c) / 100;
@@ -122,21 +129,23 @@
   // ---------- library sorting ----------
   // better: 'high' = bigger is better, 'low' = smaller is better
   const METRICS = [
+    { key: 'name', label: 'Name (A–Z)', unit: '', better: 'high', text: true, get: function () { return null; }, dec: 0 },
     { key: 'pPer100kcal', label: 'Protein per 100 kcal', unit: 'g', better: 'high', get: function (m) { return m.pPer100kcal; }, dec: 1 },
     { key: 'fPer100kcal', label: 'Fat per 100 kcal', unit: 'g', better: 'high', get: function (m) { return m.fPer100kcal; }, dec: 1 },
     { key: 'cPer100kcal', label: 'Carbs per 100 kcal', unit: 'g', better: 'high', get: function (m) { return m.cPer100kcal; }, dec: 1 },
     { key: 'pShare', label: 'Protein share of calories', unit: '%', better: 'high', get: function (m) { return m.pShare; }, dec: 0 },
     { key: 'fShare', label: 'Fat share of calories', unit: '%', better: 'high', get: function (m) { return m.fShare; }, dec: 0 },
     { key: 'cShare', label: 'Carb share of calories', unit: '%', better: 'high', get: function (m) { return m.cShare; }, dec: 0 },
-    { key: 'p100', label: 'Protein per 100 g', unit: 'g', better: 'high', get: function (m) { return m.p100; }, dec: 1 },
-    { key: 'f100', label: 'Fat per 100 g', unit: 'g', better: 'high', get: function (m) { return m.f100; }, dec: 1 },
-    { key: 'c100', label: 'Carbs per 100 g', unit: 'g', better: 'high', get: function (m) { return m.c100; }, dec: 1 },
+    { key: 'p100', label: 'Protein per 100 g/ml', unit: 'g', better: 'high', get: function (m) { return m.p100; }, dec: 1 },
+    { key: 'f100', label: 'Fat per 100 g/ml', unit: 'g', better: 'high', get: function (m) { return m.f100; }, dec: 1 },
+    { key: 'c100', label: 'Carbs per 100 g/ml', unit: 'g', better: 'high', get: function (m) { return m.c100; }, dec: 1 },
     { key: 'costP', label: '€ per 100 g protein', unit: '€', better: 'low', get: function (m) { return m.costPerGP == null ? null : m.costPerGP * 100; }, dec: 2 },
     { key: 'costF', label: '€ per 100 g fat', unit: '€', better: 'low', get: function (m) { return m.costPerGF == null ? null : m.costPerGF * 100; }, dec: 2 },
     { key: 'costC', label: '€ per 100 g carbs', unit: '€', better: 'low', get: function (m) { return m.costPerGC == null ? null : m.costPerGC * 100; }, dec: 2 },
+    { key: 'pricePerKg', label: '€ per kg / litre', unit: '€', better: 'low', get: function (m) { return m.pricePerKg; }, dec: 2 },
     { key: 'kcalPerEuro', label: 'kcal per €', unit: 'kcal', better: 'high', get: function (m) { return m.kcalPerEuro; }, dec: 0 },
     { key: 'fiberPer100kcal', label: 'Fibre per 100 kcal', unit: 'g', better: 'high', get: function (m) { return m.fiberPer100kcal; }, dec: 1 },
-    { key: 'kcal100', label: 'kcal per 100 g', unit: 'kcal', better: 'low', get: function (m) { return m.kcal; }, dec: 0 }
+    { key: 'kcal100', label: 'kcal per 100 g/ml', unit: 'kcal', better: 'low', get: function (m) { return m.kcal; }, dec: 0 }
   ];
 
   function metricDef(key) {
@@ -147,6 +156,15 @@
   // Returns [{prod, value}] with null values last. dir: 'best' (best first) or 'worst'.
   function sortProducts(list, key, dir) {
     const def = metricDef(key);
+    if (def.text) {
+      const named = list.map(function (prod) { return { prod: prod, value: null, text: (prod.name || '').trim() }; });
+      named.sort(function (a, b) {
+        if (!a.text !== !b.text) return a.text ? -1 : 1;   // unnamed items last
+        const c = a.text.localeCompare(b.text, 'nl', { sensitivity: 'base', numeric: true });
+        return dir === 'worst' ? -c : c;
+      });
+      return named;
+    }
     const rows = list.map(function (prod) { return { prod: prod, value: def.get(metrics(prod)) }; });
     const have = rows.filter(function (r) { return r.value != null && Number.isFinite(r.value); });
     const none = rows.filter(function (r) { return !(r.value != null && Number.isFinite(r.value)); });
@@ -165,10 +183,10 @@
 
   function toCsv(products) {
     const head = ['name', 'brand', 'barcode', 'kcal_per_100g', 'protein_per_100g', 'fat_per_100g', 'carbs_per_100g', 'fibre_per_100g',
-      'pack_g', 'edible_g', 'price_eur', 'price_date', 'source', 'added'];
+      'unit', 'pack', 'drained_g', 'price_eur', 'price_date', 'source', 'added'];
     const lines = [head.join(',')];
     products.forEach(function (p) {
-      lines.push([p.name, p.brand, p.barcode, p.kcal, p.p, p.f, p.c, p.fiber, p.pack, p.edible, p.price, p.priceDate, p.source, p.added]
+      lines.push([p.name, p.brand, p.barcode, p.kcal, p.p, p.f, p.c, p.fiber, unit(p), p.pack, p.edible, p.price, p.priceDate, p.source, p.added]
         .map(csvCell).join(','));
     });
     return lines.join('\n');
@@ -185,7 +203,7 @@
 
   const api = {
     num: num, dmy: dmy, macroKcal: macroKcal, kcalUsed: kcalUsed, sanity: sanity, isIncomplete: isIncomplete,
-    edibleWeight: edibleWeight, metrics: metrics, scale: scale, budgetFrom: budgetFrom, fit: fit,
+    unit: unit, edibleWeight: edibleWeight, metrics: metrics, scale: scale, budgetFrom: budgetFrom, fit: fit,
     validBarcode: validBarcode, METRICS: METRICS, metricDef: metricDef, sortProducts: sortProducts, toCsv: toCsv
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
